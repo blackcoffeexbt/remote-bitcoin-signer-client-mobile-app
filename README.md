@@ -147,7 +147,7 @@ The iOS native project has been regenerated for v0.3.0, including the local
 network permission and `RemoteSignerClientDevice` scheme. CocoaPods installation
 and an iPhone build remain pending. Physical Android/iPhone/ESP32 interoperability
 has not been verified.
-See [the specification](../docs/mobile-signer-spec.md) for bounds and phases.
+See [the specification](docs/mobile-signer-spec.md) for bounds and phases.
 
 ## Verification record — 26 September 2026
 
@@ -186,3 +186,10 @@ The emulator briefly showed an Android System UI timeout during startup.
 No physical phones, iOS native build, hardware pairing, QR camera scan, or signed
 payment navigation/recovery flow was tested for this UI update. Complete the
 acceptance and device checklists above before relying on payment flows.
+
+## Repository layout
+
+This directory is the standalone mobile Git repository. Run all commands above
+from here. The app does not require either the firmware or LNbits checkout to
+build or run. The local `docs/` directory includes the protocol and delivery spec.
+In the combined workspace, `../firmware/` and `../lnbits/` are separate repositories.

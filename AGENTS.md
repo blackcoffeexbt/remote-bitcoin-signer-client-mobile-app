@@ -1,7 +1,7 @@
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
-Read [the repository mobile specification](../docs/mobile-signer-spec.md) and
-[root guidance](../AGENTS.md). This is the live remote client for the ESP32. Never add phone Bitcoin custody
+Read [the repository mobile specification](docs/mobile-signer-spec.md) and
+[protocol](docs/protocol.md). This is the live remote client for the ESP32. Never add phone Bitcoin custody
 or pretend the phone can approve/lock/revoke the device via v1.
 The phone builds and finalizes PSBTs and broadcasts only after explicit user
 confirmation. Electrs supplies chain data; mempool.space supplies Testnet4 fee
@@ -52,3 +52,19 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Repository safety and checks
+
+This is an independent Git repository. Firmware and LNbits may be checked out as
+siblings in `../firmware/` and `../lnbits/`; neither is a build/runtime dependency.
+Keep the local specification and protocol accurate when changing client behavior;
+coordinate wire-contract updates with the firmware repository's documentation.
+Stay Testnet4-only. Bitcoin custody, signing and approval policy remain on ESP32.
+Preserve request-bound remote PIN handling, explicit broadcast confirmation,
+Testnet4 genesis checks, locally verified UTXOs/signatures/transaction identity,
+persisted address cursors and signed-payment recovery. Never log PINs or seeds.
+Preserve unrelated edits. Do not flash devices, erase storage, publish builds or
+broadcast transactions as part of ordinary source changes.
+Run `npm ci`, `npm test`, `npm run typecheck`, `npm run lint` and
+`npm run export:check` from this repository. Use the README device checklist for
+native changes and report physical tests that were not run.
