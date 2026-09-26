@@ -19,6 +19,7 @@ export function approvalStatus(status: string, pinRequired: boolean) {
 export function walletError(value: unknown): string {
   const message = value instanceof Error ? value.message : String(value || '');
   if (!message) return '';
+  if (/^Electrs: /i.test(message)) return 'The wallet server could not complete this request. Check your payment status before trying again.';
   if (/PIN|cooldown/i.test(message)) return /cooldown/i.test(message) ? 'Please wait before trying your device PIN again.' : 'Check your wallet PIN and try again on your signing device.';
   if (/insufficient|Select at least|Choose between|32 spendable|selected coin/i.test(message)) return 'Choose enough available coins to cover the payment and network fee.';
   if (/dust|positive whole-satoshi|recipient amount/i.test(message)) return 'Enter a valid amount that is large enough to send.';

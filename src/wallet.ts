@@ -190,6 +190,8 @@ export async function transactionKnown(rpc: Rpc, txid: string): Promise<boolean>
   catch (e) {
     // Only an explicit missing-transaction reply means unknown. Transport errors
     // must not turn into permission to send a replacement payment.
+    // mempool-electrs returns this exact message (code -32603 is not specific).
+    if (e instanceof Error && /^Electrs: missing transaction$/i.test(e.message)) return false;
     if (e instanceof Error && /^Electrs: /i.test(e.message) && /not found|no such|unknown transaction|invalid or non-wallet/i.test(e.message)) return false;
     throw e;
   }

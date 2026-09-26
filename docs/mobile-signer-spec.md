@@ -317,6 +317,12 @@ Connection and request deadlines are 15 seconds; at most 16 RPC calls can be
 pending. Disconnection rejects all pending work. No request, especially a
 broadcast, is automatically retried.
 
+The pre-broadcast transaction lookup recognizes mempool-electrs' exact
+`missing transaction` error as an absent transaction, alongside the existing
+Electrum missing-transaction replies. Other server errors and transport failures
+remain errors; they do not authorize a broadcast. Server request errors are
+presented separately from connection failures.
+
 `wallet.ts` derives account branches 0 and 1, computes Electrum script hashes
 (SHA256 of scriptPubKey, reversed), and queries `blockchain.scripthash.get_history`
 and `listunspent`. Discovery continues through 20 consecutive unused addresses

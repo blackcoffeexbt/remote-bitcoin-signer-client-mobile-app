@@ -126,5 +126,15 @@ test('status lookup distinguishes a missing transaction from network failures', 
   const f = setup();
   assert.equal(await transactionKnown(f.rpc, f.coin.txid), true);
   assert.equal(await transactionKnown(f.rpc, 'a'.repeat(64)), false);
+  const missing: Rpc = { request: async (method, params) => {
+    assert.equal(method, 'blockchain.transaction.get');
+    assert.deepEqual(params, [f.coin.txid, false]);
+    throw new Error('Electrs: missing transaction');
+  } };
+  assert.equal(await transactionKnown(missing, f.coin.txid), false);
+  for (const message of ['missing transaction', 'Electrs: internal error', 'Electrs: missing transaction index', 'Electrs connection failed']) {
+    const error = new Error(message);
+    await assert.rejects(transactionKnown({ request: async () => { throw error; } }, f.coin.txid), e => e === error);
+  }
   await assert.rejects(transactionKnown({ request: async () => { throw new Error('timeout'); } }, f.coin.txid), /timeout/);
 });

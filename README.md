@@ -1,12 +1,43 @@
 # Remote Signer mobile client
 
-This app controls the existing ESP32 Bitcoin signer over Nostr, in the same
-protocol role as the LNbits browser. **Bitcoin keys and approval stay on the
-ESP32.** The old phone-as-signer simulation was incorrect and has been removed.
+A **Testnet4-only** wallet client for Android and iOS, built with React Native
+and Expo. It connects to an ESP32 remote signer over Nostr. **Bitcoin keys,
+transaction signing and approval policy stay on the ESP32.** Broadcasting always
+requires a separate confirmation in the app.
+
+## Features
+
+- Wallet, Activity and Settings tabs with shared payment state.
+- QR/paste pairing with the ESP32 and authenticated remote wallet-PIN requests.
+- Electrs-backed balances, receive addresses, coins and transaction history.
+- Local payment construction, coin control, send-max and Testnet4 fee estimates.
+- Verification of device signatures before finalization and broadcast.
+- Signed-payment recovery across restarts, plus optional PSBT import/export.
+
+This repository builds independently of both firmware and LNbits. To sign a
+payment, you need a provisioned ESP32 running compatible firmware, a reachable
+Nostr relay, and a Testnet4 Electrs endpoint. See the local
+[protocol](docs/protocol.md) and [delivery specification](docs/mobile-signer-spec.md).
+
+## Quick start
+
+Run commands from this repository's root, alongside `package.json`:
+
+```sh
+npm ci
+npm run android:device
+# Or, on macOS with Xcode and an iPhone:
+npm run ios:device
+```
+
+These commands build and install a native development app. **Expo Go is not
+sufficient** because the wallet uses native TCP/TLS sockets. See [Build and run](#build-and-run)
+for platform prerequisites, native project generation and standalone packaging.
+For later JavaScript development, use `npm start`.
 
 ## Working wallet flow
 
-1. Open ESP32 **Settings → Pair a browser**. Scan/paste its QR in the app,
+1. Open ESP32 **Settings → Connect Remote Client**. Scan/paste its QR in the app,
    compare the phone's full Nostr public key on the ESP32 and approve there.
    The independent phone transport key is held in OS-backed secure storage.
 2. In **Settings → Wallet server**, save your Testnet4 Electrs Electrum endpoint:
@@ -63,8 +94,9 @@ and explicitly cleared. PINs, tokens and Bitcoin private keys are never saved.
 Node 22.13+, npm, Android Studio / SDK 36 / Java 21, and Xcode 26.4+ for iOS.
 The project uses Expo SDK 57 and development builds. Native TCP/TLS support requires a new native build; an older APK cannot run it.
 
+Run these commands from the mobile repository root:
+
 ```sh
-cd mobile
 npm ci
 npx expo prebuild
 npm run android:device
@@ -86,8 +118,7 @@ native settings across regeneration.
 
 For iPhone, first regenerate with `npx expo prebuild --platform ios` to install
 the new native dependencies, then open the generated `.xcworkspace` under `ios/`.
-The earlier demo workspace is not ready for this client: its obsolete generated
-Pods were removed to free space for the Android build. Select the
+Select the
 `Device`-suffixed scheme, your iPhone and Apple development team, then Run.
 The device scheme bundles JavaScript in Release configuration.
 
@@ -149,7 +180,7 @@ and an iPhone build remain pending. Physical Android/iPhone/ESP32 interoperabili
 has not been verified.
 See [the specification](docs/mobile-signer-spec.md) for bounds and phases.
 
-## Verification record — 26 September 2026
+## Earlier verification record — v0.3 (26 September 2026)
 
 Clean dependency installation, all 37 tests, TypeScript, lint (including App.tsx)
 and Android/iOS JavaScript exports passed. The final ARM64 Android build passed;
@@ -193,3 +224,10 @@ This directory is the standalone mobile Git repository. Run all commands above
 from here. The app does not require either the firmware or LNbits checkout to
 build or run. The local `docs/` directory includes the protocol and delivery spec.
 In the combined workspace, `../firmware/` and `../lnbits/` are separate repositories.
+
+### Repository split verification — 26 September 2026
+
+After extracting this repository, `npm ci`, all 41 tests, typecheck, lint and
+Android/iOS JavaScript exports passed from this directory. No application source
+was changed by the split. These checks do not replace the physical acceptance
+checklist or establish a successful iOS native build.
