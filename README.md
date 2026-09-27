@@ -143,6 +143,17 @@ Select the
 `Device`-suffixed scheme, your iPhone and Apple development team, then Run.
 The device scheme bundles JavaScript in Release configuration.
 
+If Xcode reports missing `Expo`/`EXConstants` module maps or `No such module
+'Expo'`, first close the project window and open `ios/Argus.xcworkspace`.
+The workspace includes both Argus and its CocoaPods dependencies; opening
+`Argus.xcodeproj` alone can leave those dependencies unbuilt. Select
+`ArgusDevice` for the standalone iPhone app. Under the Argus target's
+**Signing & Capabilities**, enable automatic signing and select your Apple
+development team for both Debug and Release. Then use **Product → Clean Build
+Folder** and Run again. Missing-team errors must be resolved separately from
+the module-map errors. If the workspace or Pods are missing, run
+`npx expo prebuild --platform ios` from the repository root first.
+
 `withActivityLintWorkaround.js` limits a release lint exception to MainActivity's
 false `Instantiatable` finding. Its compiled public constructor and full
 ReactActivity/AndroidX chain to android.app.Activity were verified during the
