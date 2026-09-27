@@ -8,7 +8,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "pw.sats.remotebitcoinsigner",
+      "bundleIdentifier": "com.lnbits.remotebitcoinsigner",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Connect to your Electrs server on your local network to sync and broadcast Testnet4 payments."
       }
@@ -20,7 +20,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "pw.sats.remotebitcoinsigner",
+      "package": "com.lnbits.remotebitcoinsigner",
       "allowBackup": false,
       "versionCode": 9
     },
