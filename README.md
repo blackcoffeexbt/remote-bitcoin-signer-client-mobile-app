@@ -1,15 +1,31 @@
-# Remote Signer mobile client
+# Argus mobile
 
 A **Testnet4-only** wallet client for Android and iOS, built with React Native
 and Expo. It connects to an ESP32 remote signer over Nostr. **Bitcoin keys,
 transaction signing and approval policy stay on the ESP32.** Broadcasting always
 requires a separate confirmation in the app.
 
+## Argus identity and appearance
+
+Argus uses a light teal/ink theme by default. Settings → Appearance offers Light,
+Dark and Use system setting; the choice is saved on this phone. The native launch
+screen, launcher icon, Wallet header and Settings show the device-and-signal logo.
+Theme changes retain wallet, signing and payment state. QR codes remain black on
+white in both modes.
+
+The app ID, URL scheme, secure storage keys and `bitcoin-signer` protocol are
+retained for update compatibility with existing installations and ESP32 devices.
+The local Android build is `artifacts/argus-0.5.4-arm64.apk` (v0.5.4, version code 9).
+Settings shows the installed version/build beneath the Argus logo.
+
 ## Features
 
 - Wallet, Activity and Settings tabs with shared payment state.
 - QR/paste pairing with the ESP32 and authenticated remote wallet-PIN requests.
 - Electrs-backed balances, receive addresses, coins and transaction history.
+- Payment amounts in recent activity and history; tap for addresses, fee, wallet
+  balance change, confirmations and the full transaction ID. Sent amounts exclude
+  change and fees; transfers within the wallet are labelled separately.
 - Local payment construction, coin control, send-max and Testnet4 fee estimates.
 - Verification of device signatures before finalization and broadcast.
 - Signed-payment recovery across restarts, plus optional PSBT import/export.
@@ -111,6 +127,11 @@ reachable local network. For standalone ARM64 Android testing:
 sh scripts/build-apk.sh
 ```
 
+The build verifies the packaged app name, version and signature before creating
+a versioned APK and checksum. It also refreshes `argus-arm64.apk`, the legacy
+`remote-signer-client-arm64.apk` download alias and the local download page so
+older client links do not serve stale branding. Historical demo APKs are separate.
+
 The local test APK uses the generated debug certificate, with bundled JavaScript
 and no Metro requirement. It is not store-signed. Android 7+ is supported.
 Generated `android/` and `ios/` directories are ignored; config plugins preserve
@@ -175,7 +196,7 @@ They do not establish native socket interoperability or physical-device behavior
 - Verify camera/file permissions, signed export and PIN clearing on background.
 
 The iOS native project has been regenerated for v0.3.0, including the local
-network permission and `RemoteSignerClientDevice` scheme. CocoaPods installation
+network permission and `ArgusDevice` scheme. CocoaPods installation
 and an iPhone build remain pending. Physical Android/iPhone/ESP32 interoperability
 has not been verified.
 See [the specification](docs/mobile-signer-spec.md) for bounds and phases.
@@ -194,7 +215,7 @@ during the integration check; the app reports this and supports a manual fee rat
 ## UI acceptance — v0.4
 
 - Wallet opens with balance, Send/Receive and recent activity. Pairing and
-  server forms appear only under Settings. PSBT tools are under Advanced tools.
+  server forms appear only under Settings. PSBT tools are under Advanced settings.
 - Back/tab navigation preserves recipient, amount, selected coins, fee, receive
   address and the prepared payment. A pending payment reopens from Wallet/Activity.
 - Receive QR matches the full copy/share address. Long addresses, large amounts,
@@ -231,3 +252,102 @@ After extracting this repository, `npm ci`, all 41 tests, typecheck, lint and
 Android/iOS JavaScript exports passed from this directory. No application source
 was changed by the split. These checks do not replace the physical acceptance
 checklist or establish a successful iOS native build.
+
+### Argus verification — v0.5.0 (26 September 2026)
+
+- Clean `npm ci`, all 41 tests, TypeScript, lint (zero warnings), and Android/iOS
+  JavaScript exports passed. Existing upstream Metro package-export warnings remain.
+- Local ARM64 Android release build passed. APK signature, package name,
+  application label `Argus`, version 0.5.0 / code 5 and ARM64 ABI were verified.
+  The local test build uses the generated debug certificate, not a store key.
+- Installed over the prior app on the Android emulator without clearing storage.
+  Inspected Wallet and Settings branding in light/dark modes. Verified dark mode
+  survives force-stop/relaunch and System appearance tracks both light and dark
+  system changes. Restored the emulator's original system appearance afterward.
+  No React Native/Android runtime errors appeared during these checks.
+- Regenerated iOS native Argus naming and splash resources; no iOS native build
+  or physical-phone testing was performed. Hardware pairing, signing, native TLS,
+  broadcast and recovery interoperability were not exercised for this UI update.
+- Public APK downloaded through ngrok and compared byte-for-byte to the signed
+  local build. SHA-256: `fefbf1ff169f2e5b75892a76112c793d010281c6c7cedbd45e150ce15678c3ad`.
+  The dedicated download directory contains only the APK and checksum.
+
+Local emulator screenshots are in `output/argus/` (ignored by Git).
+
+### Delivery correction — v0.5.1 (26 September 2026)
+
+The legacy download page still linked to a v0.4.0 APK labelled Remote Signer
+Client. v0.5.1 (code 6) rebuilds Argus from regenerated native resources and adds
+its version/build to Settings. Packaging now verifies the APK label, identity,
+version and signature before refreshing the versioned file, current aliases and
+legacy download page. It does not alter wallet storage or the app identity.
+
+Clean dependencies, TypeScript, lint, all 41 tests, both JavaScript exports and
+Android release packaging passed. Emulator update installation succeeded; Argus
+branding, the light theme and Version 0.5.1 / Build 6 were visually verified in
+Settings. The certificate matches the previous client. The public APK was compared
+byte-for-byte with the local output, and the legacy page's new link was checked.
+SHA-256: `44023c6aa126b6c1b81ac91354b3db4714ace439c9dc9663c0c6d781a7ba4337`.
+No physical-phone, firmware, signing or broadcast test was performed for this rebuild.
+
+## Payment history amounts — v0.5.2
+
+Recent activity and Activity show received/sent amounts in sats. Sent amounts
+exclude wallet change and fees. Tap for output addresses/amounts, wallet balance
+change, the known network fee, confirmations/block and the full copyable txid.
+Self-transfers and mixed-input wallet changes have distinct labels.
+
+Verification: clean dependency install, 42 tests, typecheck, lint, Android/iOS
+exports and local ARM64 release build passed. APK version 0.5.2 (code 7) and
+signature verified; the public ngrok download matched the local APK byte-for-byte.
+SHA-256: `dc497a4bce6cb5552db1b4c6d386836ab79a536a469ce017dbe2016fdf301b11`.
+Physical phone/ESP32 testing was not performed. No transaction was broadcast.
+
+
+## Local transaction history — v0.5.3
+
+Transaction history is stored per wallet and Electrs server on this phone.
+Loading/reconnecting the wallet or returning to the foreground displays saved
+activity while refreshing. New transactions and those with fewer than six
+confirmations at the previous refresh are fetched again. Transactions with six
+or more confirmations reuse verified raw data; changed block heights or a
+lower chain tip force a refresh. Address history and unspent status are always
+queried, so new payments and dropped transactions are discovered.
+
+Saved activity is labelled with its last update time and stays visible on network
+failure. It supplies no spendable coins or balance. Automatic refresh waits for
+active signing/review work and never signs, invalidates a prepared payment or
+broadcasts. Each cache slot is bounded to 16 MiB, with at most 2,000 transactions;
+a damaged cache is rebuilt from the server. Failed cache saves are shown in the
+UI and retain the previous complete slot. Recovery journals and address cursors
+are separate and retain their existing safeguards.
+
+Verification for v0.5.3: clean dependency install, 46 tests, typecheck, lint,
+Android/iOS exports and local ARM64 release build passed. APK version 0.5.3
+(code 8) and signature verified; public ngrok download matched byte-for-byte.
+SHA-256: `8ee6d8a9322085603a59aaf29598a8ec88fb67e85fadf4fcaeb2db79aba26edc`.
+Physical phone/ESP32 testing was not performed. No transaction was broadcast.
+
+
+## Address gap limit — v0.5.4
+
+Settings → Advanced settings → Address gap limit controls how many consecutive
+unused addresses are scanned on both receive and change branches. It defaults
+to 20 and accepts whole numbers from 20 to 200. The preference is saved on this
+phone and applies across wallets. Larger values can discover payments beyond
+the default gap, but refreshes take longer.
+
+Saving a changed limit clears the spendable snapshot and schedules a refresh;
+saved activity remains visible. Issued address cursors never move backwards.
+Unused receive/change issuance uses the selected gap limit, and the existing
+1,000-address-per-branch bound still applies. Values that cannot fit beyond the
+current wallet cursor are rejected; discovery never returns a partial balance.
+
+Verification for v0.5.4: clean dependency install, 48 tests, typecheck, lint,
+Android/iOS exports and local ARM64 release build passed. APK version 0.5.4
+(code 9) and signature verified.
+SHA-256: `b4c803bbd6031f1b6f8e72daf003ad5f57d4059d8016ee839666eb490a5c114b`.
+Public download verification returned HTTP 403; the user confirmed ngrok's
+monthly bandwidth quota is exhausted. Delivery remains local and no verified
+public download notification was sent. Physical phone/ESP32 testing was not
+performed. No transaction was broadcast.

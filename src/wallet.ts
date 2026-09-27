@@ -6,12 +6,26 @@ import type { PublicAccount } from './protocol.ts';
 import type { Rpc } from './electrum.ts';
 
 export const GAP = 20, MAX_INDEX = 1000;
+export function validateGapLimit(value: number): number {
+  if (!Number.isSafeInteger(value) || value < GAP || value > 200) throw new Error('Address gap limit must be a whole number from 20 to 200');
+  return value;
+}
+export function parseGapLimit(text: string): number {
+  if (!/^[0-9]{1,3}$/.test(text.trim())) throw new Error('Address gap limit must be a whole number from 20 to 200');
+  return validateGapLimit(Number(text.trim()));
+}
 const MAX_MONEY = 2100000000000000n;
 export type AddressCursor = { receive: number; change: number };
 export type WalletAddress = { branch: 0 | 1; index: number; address: string; script: string; scripthash: string; pubkey: string; path: string };
 export type Coin = WalletAddress & { txid: string; vout: number; value: bigint; height: number; confirmations: number; coinbase: boolean; raw: string };
-export type HistoryEntry = { txid: string; height: number };
-export type Snapshot = { xpub: string; height: number; syncedAt: number; coins: Coin[]; addresses: WalletAddress[]; history: HistoryEntry[]; next: AddressCursor; lastUsed: AddressCursor };
+export type HistoryEntry = {
+  txid: string; height: number; direction: 'received' | 'sent' | 'self' | 'mixed';
+  amount: bigint; net: bigint; fee: bigint | null;
+  outputs: { address: string | null; value: bigint; owned: boolean }[];
+};
+export type HistoryTransaction = { txid: string; height: number; raw: string };
+export type HistoryCache = { version: 1; xpub: string; server: string; height: number; syncedAt: number; addressCounts: AddressCursor; transactions: HistoryTransaction[] };
+export type Snapshot = { xpub: string; height: number; syncedAt: number; coins: Coin[]; addresses: WalletAddress[]; history: HistoryEntry[]; transactions: HistoryTransaction[]; next: AddressCursor; lastUsed: AddressCursor };
 export const outpoint = (c: { txid: string; vout: number }) => `${c.txid}:${c.vout}`;
 export function deriveAddress(account: PublicAccount, branch: 0 | 1, index: number): WalletAddress {
   if ((branch !== 0 && branch !== 1) || !Number.isSafeInteger(index) || index < 0 || index >= MAX_INDEX) throw new Error('Address scan limit reached (1,000 per branch)');
@@ -19,8 +33,9 @@ export function deriveAddress(account: PublicAccount, branch: 0 | 1, index: numb
   const p = payments.p2wpkh({ pubkey: key, network: networks.testnet });
   return { branch, index, address: p.address!, script: hex(p.output!), scripthash: hex(sha256(p.output!).reverse()), pubkey: hex(key), path: `${account.path}/${branch}/${index}` };
 }
-export function validateCursor(v: AddressCursor): AddressCursor {
-  if (!v || ![v.receive, v.change].every(n => Number.isSafeInteger(n) && n >= 0 && n <= MAX_INDEX - GAP)) throw new Error('Invalid or exhausted address cursor');
+export function validateCursor(v: AddressCursor, gapLimit = GAP): AddressCursor {
+  validateGapLimit(gapLimit);
+  if (!v || ![v.receive, v.change].every(n => Number.isSafeInteger(n) && n >= 0 && n <= MAX_INDEX - gapLimit)) throw new Error('Address scan limit reached for the selected gap limit');
   return { receive: v.receive, change: v.change };
 }
 const hash = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
@@ -53,10 +68,16 @@ export function verifyCoin(a: WalletAddress, row: Unspent, raw: string, tip: num
   if (tx.getId() !== row.tx_hash || !output || output.value !== BigInt(row.value) || hex(output.script) !== a.script) throw new Error('Coin amount or script does not match its previous transaction');
   return { ...a, txid: row.tx_hash, vout: row.tx_pos, value: output.value, height: row.height, confirmations: row.height > 0 ? tip - row.height + 1 : 0, coinbase: tx.isCoinbase(), raw };
 }
-export async function syncWallet(rpc: Rpc, account: PublicAccount, cursor: AddressCursor, progress: (text: string) => void = () => {}): Promise<Snapshot> {
-  validateCursor(cursor);
+export async function syncWallet(rpc: Rpc, account: PublicAccount, cursor: AddressCursor, progress: (text: string) => void = () => {}, cache: HistoryCache | null = null, gapLimit = GAP): Promise<Snapshot> {
+  validateCursor(cursor, gapLimit);
   const height = await tipHeight(rpc), addresses: WalletAddress[] = [], coins: Coin[] = [];
   const history = new Map<string, number>(), seen = new Set<string>(), rawCache = new Map<string, string>();
+  const settled = new Map((cache?.xpub === account.xpub && height >= cache.height ? cache.transactions : [])
+    .filter(tx => tx.height > 0 && cache!.height - tx.height + 1 >= 6).map(tx => [tx.txid, tx]));
+  const getRaw = async (txid: string, currentHeight: number) => {
+    const cached = settled.get(txid);
+    return cached?.height === currentHeight ? cached.raw : rawTransaction(rpc, txid);
+  };
   const next = { ...cursor }, lastUsed = { receive: -1, change: -1 };
   for (const branch of [0, 1] as const) {
     const name = branch === 0 ? 'receive' : 'change';
@@ -78,18 +99,66 @@ export async function syncWallet(rpc: Rpc, account: PublicAccount, cursor: Addre
         if (seen.has(key) || coins.length >= 1000) throw new Error('Duplicate coin or wallet exceeds 1,000 coins');
         seen.add(key);
         let raw = rawCache.get(row.tx_hash);
-        if (!raw) { raw = await rawTransaction(rpc, row.tx_hash); rawCache.set(row.tx_hash, raw); }
+        if (!raw) { raw = await getRaw(row.tx_hash, row.height); rawCache.set(row.tx_hash, raw); }
         coins.push(verifyCoin(a, row, raw, height));
       }
-      if (unused >= GAP && index >= cursor[name] + GAP - 1) { complete = true; break; }
+      if (unused >= gapLimit && index >= cursor[name] + gapLimit - 1) { complete = true; break; }
     }
     if (!complete) throw new Error('Address discovery reached 1,000 addresses without a full gap. Balance is incomplete; no payment was prepared.');
   }
-  validateCursor(next);
+  validateCursor(next, gapLimit);
   if (coins.reduce((n, c) => n + c.value, 0n) > MAX_MONEY) throw new Error('Invalid wallet balance');
-  return { xpub: account.xpub, height, syncedAt: Date.now(), coins, addresses, next, lastUsed,
-    history: [...history].map(([txid, h]) => ({ txid, height: h })).sort((a, b) => (b.height <= 0 ? Infinity : b.height) - (a.height <= 0 ? Infinity : a.height)) };
+  const transactions: HistoryTransaction[] = [];
+  for (const [txid, h] of history) {
+    progress(`Loading payment ${transactions.length + 1} of ${history.size}…`);
+    transactions.push({ txid, height: h, raw: rawCache.get(txid) ?? await getRaw(txid, h) });
+  }
+  return { xpub: account.xpub, height, syncedAt: Date.now(), coins, addresses, next, lastUsed, transactions,
+    history: summarizeHistory(transactions, addresses) };
 }
+export function summarizeHistory(records: HistoryTransaction[], addresses: Pick<WalletAddress, 'script'>[]): HistoryEntry[] {
+  // Index spent as well as unspent wallet outputs. Current UTXOs alone cannot
+  // tell a payment from change or recover amounts for older transactions.
+  const scripts = new Set(addresses.map(a => a.script));
+  const ownedOutputs = new Map<string, bigint>();
+  const transactions = [];
+  for (const { txid, height: h, raw } of records) {
+    const tx = Transaction.fromHex(raw);
+    if (tx.getId() !== txid) throw new Error('Invalid cached transaction identity');
+    let total = 0n;
+    const outputs = tx.outs.map((output, vout) => {
+      total += output.value;
+      if (output.value < 0n || total > MAX_MONEY) throw new Error('Invalid transaction amounts');
+      const owned = scripts.has(hex(output.script));
+      if (owned) ownedOutputs.set(`${txid}:${vout}`, output.value);
+      let destination: string | null = null;
+      try { destination = address.fromOutputScript(output.script, networks.testnet); } catch { /* Non-address output. */ }
+      return { address: destination, value: output.value, owned };
+    });
+    transactions.push({ txid, height: h, outputs, inputs: tx.isCoinbase() ? [] : tx.ins.map(input => `${hex(Uint8Array.from(input.hash).reverse())}:${input.index}`) });
+  }
+  const payments: HistoryEntry[] = transactions.map(tx => {
+    const spent = tx.inputs.filter(input => ownedOutputs.has(input));
+    const debit = spent.reduce((sum, input) => sum + ownedOutputs.get(input)!, 0n);
+    const credit = tx.outputs.filter(output => output.owned).reduce((sum, output) => sum + output.value, 0n);
+    const external = tx.outputs.filter(output => !output.owned).reduce((sum, output) => sum + output.value, 0n);
+    const allOwned = spent.length > 0 && spent.length === tx.inputs.length;
+    const fee = allOwned ? debit - credit - external : null;
+    if (debit > MAX_MONEY || (fee !== null && fee < 0n)) throw new Error('Invalid transaction amounts');
+    const direction = !spent.length ? 'received' : !allOwned ? 'mixed' : external > 0n ? 'sent' : 'self';
+    return { txid: tx.txid, height: tx.height, outputs: tx.outputs, direction,
+      amount: direction === 'sent' ? external : direction === 'mixed' ? credit - debit : credit,
+      net: credit - debit, fee };
+  });
+  return payments.sort((a, b) => (b.height <= 0 ? Infinity : b.height) - (a.height <= 0 ? Infinity : a.height));
+}
+export function cachedHistory(cache: HistoryCache, account: PublicAccount): HistoryEntry[] {
+  if (cache.xpub !== account.xpub) throw new Error('Wrong wallet history');
+  const addresses = ([0, 1] as const).flatMap(branch => Array.from(
+    { length: cache.addressCounts[branch === 0 ? 'receive' : 'change'] }, (_, index) => deriveAddress(account, branch, index)));
+  return summarizeHistory(cache.transactions, addresses);
+}
+
 export function sats(text: string) {
   if (!/^[1-9][0-9]{0,15}$/.test(text) || BigInt(text) > MAX_MONEY) throw new Error('Enter a positive whole-satoshi amount');
   return BigInt(text);

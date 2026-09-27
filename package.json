@@ -1,6 +1,6 @@
 {
-  "name": "remote-bitcoin-signer-mobile",
-  "version": "0.4.0",
+  "name": "argus-mobile",
+  "version": "0.5.4",
   "main": "index.ts",
   "dependencies": {
     "@noble/curves": "^2.4.0",
@@ -20,7 +20,9 @@
     "expo-router": "~57.0.23",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.22",
+    "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
     "nostr-tools": "^2.25.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",

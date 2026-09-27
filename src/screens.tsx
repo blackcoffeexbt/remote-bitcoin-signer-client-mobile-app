@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import appConfig from '../app.json';
 import { Alert, Pressable, Share, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { CameraView } from 'expo-camera';
@@ -7,12 +8,14 @@ import QRCode from 'react-native-qrcode-svg';
 import { useClient } from './ClientProvider';
 import { useWallet } from './WalletProvider';
 import { BroadcastPanel } from './BroadcastPanel';
-import { Button, colors, Empty, Field, Icon, Notice, Row, Screen, styles } from './ui';
+import { Button, Empty, Field, Icon, Notice, Row, Screen, useUI } from './ui';
 import { approvalStatus, formatBtc, formatSats, shorten } from './presentation';
+import { ArgusLogo } from './ArgusLogo';
 import { outpoint } from './wallet';
 import type { HistoryEntry } from './wallet';
 
 function PendingPayment() {
+  const { styles } = useUI();
   const c = useClient();
   return c.review || c.signed || c.recovery === 'error' ? <View style={styles.card}><Row icon="send" title={c.signed ? 'Your latest payment' : c.recovery === 'error' ? 'Payment needs attention' : 'Payment in progress'} detail="Review payment details and status" onPress={() => router.push('/review')} /></View> : null;
 }
@@ -24,15 +27,26 @@ function WalletAccess() {
   </Empty>;
 }
 function ActivityRow({ tx, height }: { tx: HistoryEntry; height: number }) {
+  const { styles } = useUI();
   const [expanded, setExpanded] = useState(false);
-  return <View><Row icon="bitcoin" title={tx.height > 0 ? 'Confirmed transaction' : 'Pending transaction'} detail={shorten(tx.txid)} onPress={() => setExpanded(!expanded)} />
-    {expanded && <View style={{ gap: 10, paddingBottom: 16 }}><Text selectable style={styles.mono}>{tx.txid}</Text><Text style={styles.muted}>{tx.height > 0 ? `${height - tx.height + 1} confirmations` : 'Waiting for confirmation'}</Text><Button title="Copy transaction ID" secondary icon="copy" onPress={() => void Clipboard.setStringAsync(tx.txid).catch(() => Alert.alert('Copy failed', 'Please try again.'))} /></View>}
+  const label = { received: 'Received', sent: 'Sent', self: 'Moved within wallet', mixed: 'Wallet change' }[tx.direction];
+  const sign = tx.direction === 'received' ? '+' : tx.direction === 'sent' ? '−' : '';
+  return <View><Row icon={tx.direction === 'received' ? 'receive' : tx.direction === 'sent' ? 'send' : 'bitcoin'} title={`${sign}${formatSats(tx.amount)} sats`} detail={`${label} · ${tx.height > 0 ? 'Confirmed' : 'Pending'} · ${expanded ? 'Hide details' : 'Tap for details'}`} expanded={expanded} onPress={() => setExpanded(!expanded)} />
+    {expanded && <View style={{ gap: 10, paddingBottom: 16 }}>
+      <Text style={styles.heading}>Payment details</Text>
+      <Text style={styles.text}>Wallet balance change: {tx.net > 0n ? '+' : ''}{formatSats(tx.net)} sats</Text>
+      <Text style={styles.muted}>{tx.fee === null ? 'Fee paid by this wallet: not determined' : `Network fee: ${formatSats(tx.fee)} sats`}</Text>
+      <Text style={styles.muted}>{tx.height > 0 ? `${height - tx.height + 1} confirmations · Block ${tx.height}` : 'Waiting for confirmation'}</Text>
+      {tx.outputs.map((output, index) => <View key={index} style={{ gap: 4 }}><Text style={styles.label}>{output.owned ? 'Your wallet' : 'Recipient'} · {formatSats(output.value)} sats</Text><Text selectable style={styles.mono}>{output.address ?? 'Non-address output'}</Text></View>)}
+      <Text style={styles.label}>Transaction ID</Text><Text selectable style={styles.mono}>{tx.txid}</Text><Button title="Copy transaction ID" secondary icon="copy" onPress={() => void Clipboard.setStringAsync(tx.txid).catch(() => Alert.alert('Copy failed', 'Please try again.'))} />
+    </View>}
   </View>;
 }
 export function HomeScreen() {
+  const { colors, styles } = useUI();
   const c = useClient(), w = useWallet();
   const total = w.snapshot?.coins.reduce((n, coin) => n + coin.value, 0n);
-  return <Screen tab><View style={styles.between}><Text style={styles.title}>Wallet</Text><View style={styles.pill}><Text style={styles.network}>Testnet4</Text></View></View>
+  return <Screen tab><View style={styles.between}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><ArgusLogo size={38} /><Text style={styles.title}>Argus</Text></View><View style={styles.pill}><Text style={styles.network}>Testnet4</Text></View></View>
     {!c.account ? <WalletAccess /> : <>
       <View style={styles.balance}><View style={styles.iconCircle}><Icon name="bitcoin" color={colors.accent} /></View><Text style={styles.muted}>Total balance</Text><Text adjustsFontSizeToFit numberOfLines={1} style={styles.amount}>{total === undefined ? '—' : formatBtc(total)}</Text><Text style={styles.muted}>BTC{total === undefined ? '' : `  ·  ${formatSats(total)} sats`}</Text>
         <Text style={styles.muted}>{w.snapshot ? `Updated ${new Date(w.snapshot.syncedAt).toLocaleTimeString()}` : 'Refresh to see your balance'}</Text>
@@ -42,31 +56,41 @@ export function HomeScreen() {
       {!w.savedServer ? <View style={styles.card}><Row title="Connect a wallet server" detail="Add your server in Settings to see your balance." icon="settings" onPress={() => router.push('/server')} /></View> : <Button title={w.busy ? 'Updating wallet…' : 'Refresh balance'} secondary icon="refresh" disabled={w.lock} onPress={() => void w.sync()} />}
       <Notice error={w.error || c.error} />
       <View style={styles.between}><Text style={styles.heading}>Recent activity</Text><Pressable accessibilityRole="button" onPress={() => router.push('/activity')}><Text style={{ color: colors.accent }}>View all</Text></Pressable></View>
-      {w.snapshot?.history.length ? <View style={styles.card}>{w.snapshot.history.slice(0, 3).map(tx => <ActivityRow key={tx.txid} tx={tx} height={w.snapshot!.height} />)}</View> : <Empty icon="activity" title="No activity yet" description={w.snapshot ? 'Your payments will appear here.' : 'Refresh your wallet to see recent payments.'} />}
+      {w.historyCached && <Text style={styles.muted}>Saved activity · Updated {new Date(w.history!.syncedAt).toLocaleString()}</Text>}
+      {!!w.historyError && <Text accessibilityRole="alert" style={styles.error}>{w.historyError}</Text>}
+      {w.history?.history.length ? <View style={styles.card}>{w.history.history.slice(0, 3).map(tx => <ActivityRow key={tx.txid} tx={tx} height={w.history!.height} />)}</View> : <Empty icon="activity" title="No activity yet" description={w.snapshot ? 'Your payments will appear here.' : 'Refresh your wallet to see recent payments.'} />}
     </>}
   </Screen>;
 }
 export function ActivityScreen() {
+  const { styles } = useUI();
   const c = useClient(), w = useWallet(), [visible, setVisible] = useState(30);
   return <Screen tab title="Activity" subtitle="Your Bitcoin transactions"><PendingPayment />
     {!c.account ? <WalletAccess /> : <><Button title={w.busy ? 'Updating…' : 'Refresh activity'} secondary icon="refresh" disabled={w.lock || !w.savedServer} onPress={() => void w.sync()} /><Notice error={w.error} />
-      {w.snapshot?.history.length ? <View style={styles.card}>{w.snapshot.history.slice(0, visible).map(tx => <ActivityRow key={tx.txid} tx={tx} height={w.snapshot!.height} />)}{w.snapshot.history.length > visible && <Button title="Show more" secondary onPress={() => setVisible(v => v + 30)} />}</View> : <Empty icon="activity" title="No transactions to show" description="Received and sent payments will appear here after your wallet updates." />}
+      {w.historyCached && <Text style={styles.muted}>Saved activity · Updated {new Date(w.history!.syncedAt).toLocaleString()}</Text>}
+      {!!w.historyError && <Text accessibilityRole="alert" style={styles.error}>{w.historyError}</Text>}
+      {w.history?.history.length ? <View style={styles.card}>{w.history.history.slice(0, visible).map(tx => <ActivityRow key={tx.txid} tx={tx} height={w.history!.height} />)}{w.history.history.length > visible && <Button title="Show more" secondary onPress={() => setVisible(v => v + 30)} />}</View> : <Empty icon="activity" title="No transactions to show" description="Received and sent payments will appear here after your wallet updates." />}
     </>}
   </Screen>;
 }
 export function SettingsScreen() {
+  const { colors, styles, preference, setPreference, ready, saving, error } = useUI();
   const c = useClient(), w = useWallet();
-  return <Screen tab title="Settings"><View style={styles.card}>
+  return <Screen tab title="Settings"><View style={[styles.card, { alignItems: 'center' }]}><ArgusLogo size={88} /><Text style={styles.title}>Argus</Text><Text style={styles.muted}>Remote access. Secret secured.</Text><Text style={styles.muted}>Bitcoin keys stay on your signing device.</Text><Text style={styles.muted}>Version {appConfig.expo.version} · Build {appConfig.expo.android.versionCode}</Text></View><View style={styles.card}>
     <Row icon="device" title="Signing device" detail={c.connection ? 'Paired device' : 'Add a device'} onPress={() => router.push('/signer')} />
     <View style={styles.divider} /><Row icon="settings" title="Wallet server" detail={w.savedServer ? 'Custom Electrs server' : 'Not configured'} onPress={() => router.push('/server')} />
-    <View style={styles.divider} /><Row icon="coins" title="Advanced tools" detail="Import transactions and view wallet details" onPress={() => router.push('/advanced')} />
+    <View style={styles.divider} /><Row icon="coins" title="Advanced settings" detail="Address gap limit, wallet details and transaction tools" onPress={() => router.push('/advanced')} />
+  </View><View style={styles.card}><Text style={styles.heading}>Appearance</Text>
+    {(['light', 'dark', 'system'] as const).map(mode => <Pressable key={mode} accessibilityRole="radio" accessibilityLabel={mode === 'system' ? 'Use system appearance' : `${mode === 'light' ? 'Light' : 'Dark'} mode`} accessibilityState={{ selected: preference === mode, disabled: !ready || saving }} disabled={!ready || saving} onPress={() => void setPreference(mode)} style={styles.row}><View style={styles.flex}><Text style={styles.text}>{mode === 'system' ? 'Use system setting' : mode === 'light' ? 'Light' : 'Dark'}</Text></View>{preference === mode && <Icon name="check" color={colors.accent} />}</Pressable>)}
+    <Notice error={error} />
   </View><View style={styles.card}><View style={styles.between}><Text style={styles.text}>Bitcoin network</Text><View style={styles.pill}><Text style={styles.network}>Testnet4</Text></View></View><Text style={styles.muted}>Use Testnet4 coins with this wallet.</Text></View></Screen>;
 }
 export function SignerScreen() {
+  const { styles } = useUI();
   const c = useClient(), [adding, setAdding] = useState(false), lock = c.busy || c.chainBusy;
   return <Screen title="Signing device" subtitle="Your device approves each payment.">
     {c.connection && <View style={styles.card}><Row icon="device" title="Paired signing device" detail={shorten(c.connection.pubkey)} /><Button title="Connect device" secondary disabled={lock} loading={c.busy} onPress={c.reconnect} /><Button title="Pair another device" secondary disabled={lock} onPress={() => setAdding(!adding)} /></View>}
-    {(!c.connection || adding) && <View style={styles.card}><Text style={styles.heading}>Pair your device</Text><Text style={styles.text}>On your signing device, open Settings → Pair a browser. Scan the code shown there.</Text>
+    {(!c.connection || adding) && <View style={styles.card}><Text style={styles.heading}>Pair your device</Text><Text style={styles.text}>On your signing device, open Settings → Connect. Scan the code shown there.</Text>
       <Button title="Scan pairing code" icon="qr" disabled={lock || !c.ready} onPress={() => void c.scan()} />
       {c.scanning && <><CameraView style={{ height: 260, borderRadius: 16 }} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={({ data }) => c.acceptCode(data)} /><Button title="Close camera" secondary onPress={c.closeScanner} /></>}
       <Field label="Pairing code" editable={!lock} value={c.code} onChangeText={c.setCode} multiline autoCorrect={false} autoCapitalize="none" maxLength={2048} placeholder="Or paste a pairing code" />
@@ -80,6 +104,7 @@ export function SignerScreen() {
   </Screen>;
 }
 export function ServerScreen() {
+  const { styles } = useUI();
   const w = useWallet();
   return <Screen title="Wallet server" subtitle="Connect to your Testnet4 Electrs server."><Field label="Server address" editable={!w.lock && w.settingsReady} value={w.server} onChangeText={value => { w.setServer(value); w.invalidate(); }} autoCorrect={false} autoCapitalize="none" maxLength={240} placeholder="ssl://your-server:50002" />
     <Text style={styles.muted}>Use ssl://host:port for an encrypted connection, or tcp://host:port for a local server.</Text>
@@ -90,6 +115,7 @@ export function ServerScreen() {
 }
 function NeedBalance() { const w = useWallet(); return <Empty title="Update your wallet" description="Refresh your balance before receiving or sending.">{w.savedServer ? <Button title="Refresh balance" disabled={w.lock} onPress={() => void w.sync()} /> : <Button title="Set up wallet server" onPress={() => router.push('/server')} />}<Notice error={w.error} /></Empty>; }
 export function ReceiveScreen() {
+  const { styles } = useUI();
   const c = useClient(), w = useWallet();
   return <Screen title="Receive Bitcoin" subtitle="Only send Testnet4 coins to this address.">
     {!c.account ? <WalletAccess /> : !w.snapshot ? <NeedBalance /> : <>
@@ -99,6 +125,7 @@ export function ReceiveScreen() {
   </Screen>;
 }
 export function SendScreen() {
+  const { colors, styles } = useUI();
   const c = useClient(), w = useWallet();
   return <Screen title="Send Bitcoin" subtitle="Choose who to pay and how much to send.">
     {!c.account ? <WalletAccess /> : c.signed ? <><PendingPayment /><Text style={styles.muted}>Finish reviewing your saved payment before starting another.</Text></> : !w.snapshot ? <NeedBalance /> : <>
@@ -112,6 +139,7 @@ export function SendScreen() {
   </Screen>;
 }
 export function FeesScreen() {
+  const { colors, styles } = useUI();
   const w = useWallet(), [custom, setCustom] = useState(!w.estimated && !!w.rate);
   return <Screen title="Network fee" subtitle="Higher fees may confirm sooner."><Button title={w.busy ? 'Getting estimates…' : 'Get fee estimates'} secondary icon="refresh" disabled={w.lock} onPress={w.updateFees} />
     {w.fees && <><View style={styles.card}>{([['Priority', '~30 minutes', 'halfHourFee'], ['Standard', '~1 hour', 'hourFee'], ['Economy', 'When the network is quieter', 'economyFee']] as const).map(([name, time, key]) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ selected: w.estimated && w.feeTarget === key }} disabled={w.lock} onPress={() => { w.setRate(String(w.fees![key])); w.setFeeTarget(key); w.setEstimated(true); setCustom(false); w.invalidate(); }} style={styles.row}><View style={styles.flex}><Text style={styles.text}>{name}</Text><Text style={styles.muted}>{time}</Text></View><Text style={{ color: colors.accent }}>{w.fees![key]} sat/vB</Text>{w.estimated && w.feeTarget === key && <Icon name="check" color={colors.accent} size={18} />}</Pressable>)}</View><Text style={styles.muted}>Estimates from mempool.space · Updated {new Date(w.fees.fetchedAt).toLocaleTimeString()}. Confirmation times may vary.</Text></>}
@@ -121,6 +149,7 @@ export function FeesScreen() {
   </Screen>;
 }
 export function CoinsScreen() {
+  const { colors, styles } = useUI();
   const w = useWallet(), [visible, setVisible] = useState(30);
   return <Screen title="Coin control" subtitle="Choose which coins to spend."><View style={styles.between}><Text style={styles.text}>Select coins manually</Text><Switch accessibilityLabel="Select coins manually" disabled={w.lock} value={w.manual} onValueChange={v => { w.setManual(v); w.setSelected([]); w.invalidate(); }} trackColor={{ true: colors.accent }} /></View>
     <Text style={styles.muted}>{w.manual ? 'Only the coins you select will be used.' : 'Your wallet will choose available coins for this payment.'}</Text>
@@ -130,6 +159,7 @@ export function CoinsScreen() {
   </Screen>;
 }
 export function ReviewScreen() {
+  const { styles } = useUI();
   const c = useClient();
   return <Screen title={c.signed ? 'Payment details' : 'Review payment'} subtitle="Testnet4">
     {c.review ? <>
@@ -145,8 +175,16 @@ export function ReviewScreen() {
   </Screen>;
 }
 export function AdvancedScreen() {
-  const c = useClient(), [details, setDetails] = useState(false);
-  return <Screen title="Advanced tools"><View style={styles.card}><Row title="Import transaction" detail="Open an unsigned PSBT" onPress={() => router.push('/import')} /><View style={styles.divider} /><Row title="Wallet details" detail="View your public wallet information" onPress={() => setDetails(!details)} /></View>
+  const { styles } = useUI();
+  const c = useClient(), w = useWallet(), [details, setDetails] = useState(false);
+  return <Screen title="Advanced settings"><View style={styles.card}>
+    <Text style={styles.heading}>Address discovery</Text>
+    <Text style={styles.muted}>How many unused addresses to check before stopping, for both receive and change addresses. Increase this if expected payments are missing. Larger values take longer to refresh.</Text>
+    <Field label="Address gap limit" value={w.gapInput} onChangeText={w.setGapInput} editable={!w.lock} keyboardType="number-pad" maxLength={3} />
+    <Text style={styles.muted}>20–200 · Default 20 · Saved on this phone: {w.gapLimit}</Text>
+    <Button title="Save gap limit" disabled={w.lock || w.gapInput.trim() === String(w.gapLimit)} onPress={() => void w.saveGapSettings()} />
+    <Notice error={w.error} />
+  </View><View style={styles.card}><Row title="Import transaction" detail="Open an unsigned PSBT" onPress={() => router.push('/import')} /><View style={styles.divider} /><Row title="Wallet details" detail="View your public wallet information" onPress={() => setDetails(!details)} /></View>
     {details && c.account && <View style={styles.card}><Text style={styles.label}>Fingerprint</Text><Text selectable style={styles.mono}>{c.account.fingerprint}</Text><Text style={styles.label}>Account path</Text><Text selectable style={styles.mono}>{c.account.path}</Text><Text style={styles.label}>Public key</Text><Text selectable style={styles.mono}>{c.account.xpub}</Text><Button title="Share public wallet" secondary onPress={() => void Share.share({ message: JSON.stringify({ descriptor: c.account!.descriptor, xpub: c.account!.xpub, fingerprint: c.account!.fingerprint, path: c.account!.path }, null, 2) }).catch(() => Alert.alert('Sharing failed', 'Please try again.'))} /></View>}
     {details && !c.account && <Text style={styles.muted}>Connect your signing device to view wallet details.</Text>}
     {!!c.signed && <View style={styles.card}><Text style={styles.heading}>Export signed transaction</Text><Button title="Copy signed PSBT" secondary onPress={() => void Clipboard.setStringAsync(c.signed).catch(() => Alert.alert('Copy failed', 'Please try again.'))} /><Button title="Share PSBT file" secondary onPress={() => void c.shareSigned()} /></View>}<Notice error={c.error} />

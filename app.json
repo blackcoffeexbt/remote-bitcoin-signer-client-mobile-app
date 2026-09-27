@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Remote Signer Client",
-    "slug": "remote-bitcoin-signer",
-    "version": "0.4.0",
+    "name": "Argus",
+    "slug": "argus",
+    "version": "0.5.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "pw.sats.remotebitcoinsigner",
@@ -15,15 +15,14 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#006C67",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "pw.sats.remotebitcoinsigner",
       "allowBackup": false,
-      "versionCode": 4
+      "versionCode": 9
     },
     "scheme": "remote-bitcoin-signer",
     "platforms": [
@@ -42,7 +41,19 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-router"
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F5F8F7",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 240,
+          "dark": {
+            "backgroundColor": "#0E1C22",
+            "image": "./assets/splash-icon-dark.png"
+          }
+        }
+      ]
     ]
   }
 }

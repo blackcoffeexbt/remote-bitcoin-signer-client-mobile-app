@@ -27,7 +27,7 @@ function useClientState() {
   const [state, setState] = useState(initial);
   const [error, setError] = useState('');
   const [code, setCode] = useState('');
-  const [label, setLabel] = useState('My phone');
+  const [label, setLabel] = useState('Argus phone');
   const [psbt, setPsbt] = useState('');
   const [review, setReview] = useState<Review | null>(null);
   const [signed, setSigned] = useState('');

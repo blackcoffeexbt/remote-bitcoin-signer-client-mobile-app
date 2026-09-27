@@ -19,6 +19,9 @@ export function approvalStatus(status: string, pinRequired: boolean) {
 export function walletError(value: unknown): string {
   const message = value instanceof Error ? value.message : String(value || '');
   if (!message) return '';
+  if (/Address gap limit must/i.test(message)) return 'Enter a whole number from 20 to 200 for the address gap limit.';
+  if (/Unused address gap limit/i.test(message)) return 'Use an existing address and refresh, or increase the address gap limit in Advanced settings.';
+  if (/Address scan limit reached for the selected gap limit/i.test(message)) return 'This gap limit exceeds the remaining address scan range. Choose a smaller gap limit in Advanced settings.';
   if (/^Electrs: /i.test(message)) return 'The wallet server could not complete this request. Check your payment status before trying again.';
   if (/PIN|cooldown/i.test(message)) return /cooldown/i.test(message) ? 'Please wait before trying your device PIN again.' : 'Check your wallet PIN and try again on your signing device.';
   if (/insufficient|Select at least|Choose between|32 spendable|selected coin/i.test(message)) return 'Choose enough available coins to cover the payment and network fee.';

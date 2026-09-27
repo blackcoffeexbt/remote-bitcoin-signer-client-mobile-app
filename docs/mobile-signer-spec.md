@@ -1,4 +1,4 @@
-# Remote Bitcoin Signer: current flow and mobile delivery specification
+# Argus: current flow and mobile delivery specification
 
 Status: corrected client implementation, 26 September 2026. The phone controls
 the existing ESP32 signer. The earlier phone-as-signer proposal and simulation
@@ -325,19 +325,22 @@ presented separately from connection failures.
 
 `wallet.ts` derives account branches 0 and 1, computes Electrum script hashes
 (SHA256 of scriptPubKey, reversed), and queries `blockchain.scripthash.get_history`
-and `listunspent`. Discovery continues through 20 consecutive unused addresses
+and `listunspent`. Discovery continues through the configured number of consecutive unused addresses
+(default 20, range 20–200, saved in SecureStore per phone)
 past both observed usage and locally issued indices. It stops with an error,
 not a partial spendable balance, if 1,000 addresses per branch, 1,000 coins or
-2,000 unique history entries would be exceeded. History displays its latest
-50 entries with server-reported confirmations. Full previous transaction data
+2,000 unique history entries would be exceeded. History displays 30 entries at a time with server-reported confirmations. Full previous transaction data
 from `blockchain.transaction.get` is checked against txid, vout, value and owned
 script before a coin enters the wallet snapshot. Immature coinbase is displayed
 but never selected; unconfirmed spend requires explicit opt-in.
 
 Receive and change cursors are monotonic and scoped to the xpub in SecureStore.
 Save before displaying a fresh receive address or exposing a prepared change
-address. At most 20 unused addresses may be issued beyond the last observed
-usage. Forgetting a device pairing retains these cursors. App deletion/storage
+address. At most the selected gap limit of unused addresses may be issued beyond the last
+observed usage. Settings → Advanced settings exposes the gap limit. Saving it
+invalidates the spendable snapshot and triggers a refresh without resetting
+monotonic cursors or deleting cached activity. Scan and cursor checks still
+require a full gap within the 1,000-address-per-branch bound. Forgetting a device pairing retains these cursors. App deletion/storage
 loss and another wallet issuing beyond the gap can still require external
 recovery; the scanner does not claim unbounded wallet discovery.
 
@@ -463,11 +466,31 @@ bottom tabs. Wallet shows balance, Send/Receive shortcuts, a saved-payment entry
 and recent activity. Receive displays a QR code and copy/share actions. Send
 collects recipient and amount, with separate fee and coin-control screens, then
 opens payment review, device PIN/approval and explicit **Send payment** confirmation.
-Activity provides progressively loaded transactions with expandable identifiers.
+Activity provides progressively displayed transactions with payment amounts.
+New and unsettled history transactions are fetched and checked against their
+txids after address discovery. A wallet/server-scoped two-slot document cache
+stores raw public transactions, block heights, scan counts and the observed tip.
+On wallet load/reconnect and foreground entry, cached history is displayed with
+its timestamp while a refresh runs. Only records that already had at least six
+confirmations may reuse raw data, and only when the current history height is
+unchanged and the tip has not moved backwards. Full address-history and UTXO
+queries still discover new/dropped transactions and reorg changes. Raw txids and
+bounds are checked on cache load; ownership/amounts are recomputed from the
+account. Cache files contain no spendable snapshot and cannot authorize spending.
+Corrupt caches are rebuilt; failed refreshes preserve the previous list. Cache
+writes are serialized and commit a separate pointer only after read-back. Each
+slot is at most 16 MiB; oversized saves show an error without discarding live
+results. Active unsigned payment review delays automatic refresh, and automatic
+refresh never resumes signing or broadcasting. Owned outputs, including spent outputs, determine received
+amounts and wallet balance changes. All-wallet-input payments show external
+recipient totals excluding change and fee; self-transfers are labelled separately.
+Mixed-input transactions show only the net wallet change, without attributing
+the whole payment or fee to this wallet. Tap a row for output addresses and
+amounts, wallet balance change, known fee, confirmations, block and full txid.
 
 Device pairing lives only in Settings → Signing device. Server configuration is
 Settings → Wallet server. Public account details and PSBT import/export are
-Settings → Advanced tools. Full pairing verification codes appear only while
+Settings → Advanced settings. Full pairing verification codes appear only while
 pairing. Normal screens never display Nostr/relay/protocol diagnostics, engineering
 notes, conversation history or implementation/testing caveats. Testnet4 remains
 visible as the actual wallet network. Backend errors are translated into actionable

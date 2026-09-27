@@ -6,9 +6,10 @@ import { dialElectrum } from './electrum-native';
 import { broadcastPayment, checkPsbtUnspent, finalizePayment, transactionKnown } from './wallet';
 import { loadServer, loadPayment, savePayment } from './wallet-storage';
 import type { SavedPayment } from './wallet-storage';
-import { Button, Notice, Row, styles } from './ui';
+import { Button, Notice, Row, useUI } from './ui';
 
 export function BroadcastPanel({ account, original, signed, disabled, onBusyChange }: { account: PublicAccount; original: string; signed: string; disabled: boolean; onBusyChange(value: boolean): void }) {
+  const { styles } = useUI();
   const final = useMemo(() => finalizePayment(original, signed, account), [original, signed, account]);
   const [status, setStatus] = useState('Approved by your device. Ready to send.'), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false), working = useRef(false), alive = useRef(true), rpc = useRef<ElectrumClient | null>(null);

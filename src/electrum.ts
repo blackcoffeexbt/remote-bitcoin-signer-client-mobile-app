@@ -40,7 +40,7 @@ export class ElectrumClient implements Rpc {
           if (this.closed) this.wire.close();
         } catch (e) { this.close(e instanceof Error ? e : new Error('Could not connect to Electrs')); }
       });
-      const version = await this.call('server.version', ['RemoteSigner/0.3', '1.4']);
+      const version = await this.call('server.version', ['Argus/0.5', '1.4']);
       if (!Array.isArray(version) || typeof version[1] !== 'string' || !/^1\.4(?:\.|$)/.test(version[1])) throw new Error('Electrs must support Electrum protocol 1.4');
       const header = await this.call('blockchain.block.header', [0]);
       if (typeof header !== 'string' || !/^[0-9a-fA-F]{160}$/.test(header) ||
