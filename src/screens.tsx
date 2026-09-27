@@ -11,6 +11,7 @@ import { BroadcastPanel } from './BroadcastPanel';
 import { Button, Empty, Field, Icon, Notice, Row, Screen, useUI } from './ui';
 import { approvalStatus, formatBtc, formatSats, shorten } from './presentation';
 import { ArgusLogo } from './ArgusLogo';
+import { ArgusBrand } from './ArgusBrand';
 import { outpoint } from './wallet';
 import type { HistoryEntry } from './wallet';
 
@@ -76,7 +77,7 @@ export function ActivityScreen() {
 export function SettingsScreen() {
   const { colors, styles, preference, setPreference, ready, saving, error } = useUI();
   const c = useClient(), w = useWallet();
-  return <Screen tab title="Settings"><View style={[styles.card, { alignItems: 'center' }]}><ArgusLogo size={88} /><Text style={styles.title}>Argus</Text><Text style={styles.muted}>Remote access. Secret secured.</Text><Text style={styles.muted}>Bitcoin keys stay on your signing device.</Text><Text style={styles.muted}>Version {appConfig.expo.version} · Build {appConfig.expo.android.versionCode}</Text></View><View style={styles.card}>
+  return <Screen tab title="Settings"><View style={[styles.card, { alignItems: 'center' }]}><ArgusBrand compact /><Text style={styles.muted}>Remote access. Secret secured.</Text><Text style={styles.muted}>Bitcoin keys stay on your signing device.</Text><Text style={styles.muted}>Version {appConfig.expo.version} · Build {appConfig.expo.android.versionCode}</Text></View><View style={styles.card}>
     <Row icon="device" title="Signing device" detail={c.connection ? 'Paired device' : 'Add a device'} onPress={() => router.push('/signer')} />
     <View style={styles.divider} /><Row icon="settings" title="Wallet server" detail={w.savedServer ? 'Custom Electrs server' : 'Not configured'} onPress={() => router.push('/server')} />
     <View style={styles.divider} /><Row icon="coins" title="Advanced settings" detail="Address gap limit, wallet details and transaction tools" onPress={() => router.push('/advanced')} />
