@@ -22,14 +22,14 @@ export function walletError(value: unknown): string {
   if (/Address gap limit must/i.test(message)) return 'Enter a whole number from 20 to 200 for the address gap limit.';
   if (/Unused address gap limit/i.test(message)) return 'Use an existing address and refresh, or increase the address gap limit in Advanced settings.';
   if (/Address scan limit reached for the selected gap limit/i.test(message)) return 'This gap limit exceeds the remaining address scan range. Choose a smaller gap limit in Advanced settings.';
-  if (/^Electrs: /i.test(message)) return 'The wallet server could not complete this request. Check your payment status before trying again.';
+  if (/^Electrs: /i.test(message)) return 'The Electrs server could not complete this request. Check your payment status before trying again.';
   if (/PIN|cooldown/i.test(message)) return /cooldown/i.test(message) ? 'Please wait before trying your device PIN again.' : 'Check your wallet PIN and try again on your signing device.';
   if (/insufficient|Select at least|Choose between|32 spendable|selected coin/i.test(message)) return 'Choose enough available coins to cover the payment and network fee.';
   if (/dust|positive whole-satoshi|recipient amount/i.test(message)) return 'Enter a valid amount that is large enough to send.';
   if (/recipient|Taproot/i.test(message)) return 'Check the recipient address. Use a Testnet4 legacy or SegWit address.';
   if (/Fee rate|fee estimates.*old/i.test(message)) return 'Choose a current network fee or enter a valid custom rate.';
   if (/mempool.space|fee response|Fee response|fee estimates/i.test(message)) return 'Fee estimates are unavailable. Try again or choose a custom fee.';
-  if (/not on Bitcoin Testnet4/i.test(message)) return 'This server is on a different Bitcoin network. Choose a Testnet4 server in Settings.';
+  if (/not on Bitcoin Testnet4/i.test(message)) return 'This server is on a different Bitcoin network. Choose a Testnet4 Electrs server in Node settings.';
   if (/spent|lost confirmations|immature|mature/i.test(message)) return 'Some coins are no longer available. Refresh your wallet and review the payment again.';
   if (/snapshot.*old|Sync.*wallet/i.test(message)) return 'Refresh your balance before creating this payment.';
   if (/20 unused|Address.*limit|discovery|exceeds.*limit|oversized wallet|1,000/i.test(message)) return 'Wallet address limit reached. Use an existing address and refresh, or check your wallet with your server administrator.';
@@ -38,8 +38,8 @@ export function walletError(value: unknown): string {
   if (/account changed|Foreign|verify|verified|Invalid Bitcoin|different transaction|signature|previous transaction|Coin amount|PSBT|recovery|saved payment/i.test(message)) return 'This payment or wallet could not be verified. Nothing new has been sent. Check your device and payment history before continuing.';
   if (/storage|save|preserve|commit payment/i.test(message)) return 'Could not save this payment. Check free space and unlock your phone before trying again.';
   if (/Camera/i.test(message)) return 'Allow camera access in your phone settings, or paste the pairing code.';
-  if (/server.*first|Electrs.*address|ssl:\/\/|server port/i.test(message)) return 'Check the wallet server address in Settings, including its port.';
-  if (/Electrs|connect|network|TLS/i.test(message)) return 'Could not connect. Check your internet connection and wallet server in Settings.';
+  if (/server.*first|Electrs.*address|ssl:\/\/|server port/i.test(message)) return 'Check the Electrs server address in Node settings, including its port.';
+  if (/Electrs|connect|network|TLS/i.test(message)) return 'Could not connect. Check your internet connection and Electrs server in Node settings.';
   if (/reject|denied|refused/i.test(message)) return 'The request was declined. Check your signing device before trying again.';
   return 'Could not complete this action. Check your connection and try again.';
 }

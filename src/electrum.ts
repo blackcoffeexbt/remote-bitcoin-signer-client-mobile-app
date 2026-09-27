@@ -1,6 +1,8 @@
 import { Buffer } from 'buffer';
 import { sha256 } from '@noble/hashes/sha2.js';
 
+export const DEFAULT_ELECTRS_SERVER = 'ssl://mempool.space:40002';
+
 // Bitcoin Core's Testnet4 genesis. Addresses alone cannot distinguish test networks.
 export const TESTNET4_GENESIS = '00000000da84f2bafbbc53dee25a72ae507ff4914b867c565be350b0da8bf043';
 export type Endpoint = { url: string; host: string; port: number; tls: boolean };

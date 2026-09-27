@@ -18,7 +18,7 @@ test('backend errors never echo arbitrary details and preserve uncertain-payment
   assert.match(walletError('Broadcast result is uncertain'), /payment status before/);
   assert.match(walletError('mempool.space unavailable (503)'), /custom fee/);
   assert.match(walletError('Server is not on Bitcoin Testnet4'), /different Bitcoin network/);
-  assert.equal(walletError('Electrs: internal error'), 'The wallet server could not complete this request. Check your payment status before trying again.');
+  assert.equal(walletError('Electrs: internal error'), 'The Electrs server could not complete this request. Check your payment status before trying again.');
   assert.match(walletError('Electrs connection failed'), /Could not connect/);
   assert.equal(walletError(''), '');
 });

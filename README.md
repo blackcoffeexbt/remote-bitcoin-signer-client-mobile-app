@@ -56,7 +56,9 @@ For later JavaScript development, use `npm start`.
 1. Open ESP32 **Settings → Connect Remote Client**. Scan/paste its QR in the app,
    compare the phone's full Nostr public key on the ESP32 and approve there.
    The independent phone transport key is held in OS-backed secure storage.
-2. In **Settings → Wallet server**, save your Testnet4 Electrs Electrum endpoint:
+2. In **Settings → Node settings**, configure your Testnet4 Electrs connection.
+   The default is `ssl://mempool.space:40002`; existing saved servers are retained.
+   To use your own Electrs Electrum endpoint, enter
    `ssl://host:50002` for TLS with a system-trusted certificate, or
    `tcp://192.168.1.10:50001` for a trusted local network. Plain TCP exposes
    queries to the network. This field is not an Esplora HTTP API URL. Standard

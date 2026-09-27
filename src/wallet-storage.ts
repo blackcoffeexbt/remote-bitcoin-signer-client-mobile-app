@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { File, Paths } from 'expo-file-system';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hex } from './bitcoin';
-import { parseEndpoint } from './electrum';
+import { DEFAULT_ELECTRS_SERVER, parseEndpoint } from './electrum';
 import { GAP, parseGapLimit, validateCursor, validateGapLimit } from './wallet';
 import type { AddressCursor, HistoryCache } from './wallet';
 import type { PublicAccount } from './protocol';
@@ -12,7 +12,7 @@ import { MAX_HISTORY_BYTES, readHistory, writeHistory } from './history-cache';
 export type { SavedPayment } from './recovery';
 const options = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
 const accountId = (account: PublicAccount) => hex(sha256(new TextEncoder().encode(account.xpub)));
-export async function loadServer() { return (await SecureStore.getItemAsync('wallet.electrs.v1')) ?? ''; }
+export async function loadServer() { return (await SecureStore.getItemAsync('wallet.electrs.v1')) ?? DEFAULT_ELECTRS_SERVER; }
 export async function saveServer(value: string) { await SecureStore.setItemAsync('wallet.electrs.v1', parseEndpoint(value).url, options); }
 export async function loadGapLimit() {
   const value = await SecureStore.getItemAsync('wallet.gap-limit.v1');

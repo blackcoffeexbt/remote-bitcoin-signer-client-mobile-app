@@ -295,7 +295,9 @@ Approval/rejection and device settings stay on ESP32.
 
 ### In-app chain backend and wallet construction
 
-The user saves an Electrum-protocol endpoint, `ssl://host:port` or
+Node settings contains the Testnet4 Electrs settings. When no server is saved,
+the default is `ssl://mempool.space:40002`; a saved custom endpoint takes precedence.
+The user can save another Electrum-protocol endpoint, `ssl://host:port` or
 `tcp://host:port`. This is a direct Electrs connection, not an Esplora HTTP URL.
 TLS requires a system-trusted certificate and matching hostname; TCP is for a
 trusted local network and exposes queries. `react-native-tcp-socket` 6.4.3 has a
@@ -489,7 +491,7 @@ the whole payment or fee to this wallet. Tap a row for output addresses and
 amounts, wallet balance change, known fee, confirmations, block and full txid.
 
 Device pairing lives only in Settings → Signing device. Server configuration is
-Settings → Wallet server. Public account details and PSBT import/export are
+Settings → Node settings. Public account details and PSBT import/export are
 Settings → Advanced settings. Full pairing verification codes appear only while
 pairing. Normal screens never display Nostr/relay/protocol diagnostics, engineering
 notes, conversation history or implementation/testing caveats. Testnet4 remains

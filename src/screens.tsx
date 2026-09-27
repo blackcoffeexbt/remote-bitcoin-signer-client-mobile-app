@@ -12,6 +12,7 @@ import { Button, Empty, Field, Icon, Notice, Row, Screen, useUI } from './ui';
 import { approvalStatus, formatBtc, formatSats, shorten } from './presentation';
 import { ArgusLogo } from './ArgusLogo';
 import { ArgusBrand } from './ArgusBrand';
+import { DEFAULT_ELECTRS_SERVER } from './electrum';
 import { outpoint } from './wallet';
 import type { HistoryEntry } from './wallet';
 
@@ -54,7 +55,7 @@ export function HomeScreen() {
       </View>
       <View style={styles.actions}><View style={styles.flex}><Button title="Receive" icon="receive" secondary disabled={c.busy || c.chainBusy} onPress={() => router.push('/receive')} /></View><View style={styles.flex}><Button title="Send" icon="send" disabled={c.busy || c.chainBusy || !!c.signed} onPress={() => router.push('/send')} /></View></View>
       <PendingPayment />
-      {!w.savedServer ? <View style={styles.card}><Row title="Connect a wallet server" detail="Add your server in Settings to see your balance." icon="settings" onPress={() => router.push('/server')} /></View> : <Button title={w.busy ? 'Updating wallet…' : 'Refresh balance'} secondary icon="refresh" disabled={w.lock} onPress={() => void w.sync()} />}
+      {!w.savedServer ? <View style={styles.card}><Row title="Node settings" detail="Configure your Electrs server to see your balance." icon="settings" onPress={() => router.push('/server')} /></View> : <Button title={w.busy ? 'Updating wallet…' : 'Refresh balance'} secondary icon="refresh" disabled={w.lock} onPress={() => void w.sync()} />}
       <Notice error={w.error || c.error} />
       <View style={styles.between}><Text style={styles.heading}>Recent activity</Text><Pressable accessibilityRole="button" onPress={() => router.push('/activity')}><Text style={{ color: colors.accent }}>View all</Text></Pressable></View>
       {w.historyCached && <Text style={styles.muted}>Saved activity · Updated {new Date(w.history!.syncedAt).toLocaleString()}</Text>}
@@ -79,7 +80,7 @@ export function SettingsScreen() {
   const c = useClient(), w = useWallet();
   return <Screen tab title="Settings"><View style={[styles.card, { alignItems: 'center' }]}><ArgusBrand compact /><Text style={styles.muted}>Remote access. Secret secured.</Text><Text style={styles.muted}>Bitcoin keys stay on your signing device.</Text><Text style={styles.muted}>Version {appConfig.expo.version} · Build {appConfig.expo.android.versionCode}</Text></View><View style={styles.card}>
     <Row icon="device" title="Signing device" detail={c.connection ? 'Paired device' : 'Add a device'} onPress={() => router.push('/signer')} />
-    <View style={styles.divider} /><Row icon="settings" title="Wallet server" detail={w.savedServer ? 'Custom Electrs server' : 'Not configured'} onPress={() => router.push('/server')} />
+    <View style={styles.divider} /><Row icon="settings" title="Node settings" detail={w.savedServer === DEFAULT_ELECTRS_SERVER ? 'Electrs · mempool.space (default)' : w.savedServer ? 'Electrs · Custom server' : 'Electrs · Not configured'} onPress={() => router.push('/server')} />
     <View style={styles.divider} /><Row icon="coins" title="Advanced settings" detail="Address gap limit, wallet details and transaction tools" onPress={() => router.push('/advanced')} />
   </View><View style={styles.card}><Text style={styles.heading}>Appearance</Text>
     {(['light', 'dark', 'system'] as const).map(mode => <Pressable key={mode} accessibilityRole="radio" accessibilityLabel={mode === 'system' ? 'Use system appearance' : `${mode === 'light' ? 'Light' : 'Dark'} mode`} accessibilityState={{ selected: preference === mode, disabled: !ready || saving }} disabled={!ready || saving} onPress={() => void setPreference(mode)} style={styles.row}><View style={styles.flex}><Text style={styles.text}>{mode === 'system' ? 'Use system setting' : mode === 'light' ? 'Light' : 'Dark'}</Text></View>{preference === mode && <Icon name="check" color={colors.accent} />}</Pressable>)}
@@ -107,14 +108,14 @@ export function SignerScreen() {
 export function ServerScreen() {
   const { styles } = useUI();
   const w = useWallet();
-  return <Screen title="Wallet server" subtitle="Connect to your Testnet4 Electrs server."><Field label="Server address" editable={!w.lock && w.settingsReady} value={w.server} onChangeText={value => { w.setServer(value); w.invalidate(); }} autoCorrect={false} autoCapitalize="none" maxLength={240} placeholder="ssl://your-server:50002" />
+  return <Screen title="Node settings" subtitle="Electrs settings for your Testnet4 wallet."><Field label="Electrs server address" editable={!w.lock && w.settingsReady} value={w.server} onChangeText={value => { w.setServer(value); w.invalidate(); }} autoCorrect={false} autoCapitalize="none" maxLength={240} placeholder={DEFAULT_ELECTRS_SERVER} />
     <Text style={styles.muted}>Use ssl://host:port for an encrypted connection, or tcp://host:port for a local server.</Text>
     {w.server.startsWith('tcp:') && <Text style={styles.muted}>This connection is not encrypted. Use it only on a trusted network.</Text>}
-    <Button title="Save server" disabled={w.lock || !w.settingsReady || !w.server} onPress={() => void w.saveSettings().then(ok => { if (ok) Alert.alert('Saved', 'Your wallet server has been updated.'); })} />
+    <Button title="Save node settings" disabled={w.lock || !w.settingsReady || !w.server} onPress={() => void w.saveSettings().then(ok => { if (ok) Alert.alert('Saved', 'Your Electrs node settings have been updated.'); })} />
     <Text style={styles.muted}>Your server can see your wallet activity. Choose one you trust.</Text><Notice error={w.error} />
   </Screen>;
 }
-function NeedBalance() { const w = useWallet(); return <Empty title="Update your wallet" description="Refresh your balance before receiving or sending.">{w.savedServer ? <Button title="Refresh balance" disabled={w.lock} onPress={() => void w.sync()} /> : <Button title="Set up wallet server" onPress={() => router.push('/server')} />}<Notice error={w.error} /></Empty>; }
+function NeedBalance() { const w = useWallet(); return <Empty title="Update your wallet" description="Refresh your balance before receiving or sending.">{w.savedServer ? <Button title="Refresh balance" disabled={w.lock} onPress={() => void w.sync()} /> : <Button title="Open node settings" onPress={() => router.push('/server')} />}<Notice error={w.error} /></Empty>; }
 export function ReceiveScreen() {
   const { styles } = useUI();
   const c = useClient(), w = useWallet();
