@@ -4,7 +4,7 @@ Read [the repository mobile specification](docs/mobile-signer-spec.md) and
 [protocol](docs/protocol.md). This is the live remote client for the ESP32. Never add phone Bitcoin custody
 or pretend the phone can approve/lock/revoke the device via v1.
 The phone builds and finalizes PSBTs and broadcasts only after explicit user
-confirmation. Electrs supplies chain data; mempool.space supplies Testnet4 fee
+confirmation. Electrs supplies chain data; mempool.space supplies selected-network fee
 estimates. Maintain the two-slot signed-payment recovery journal, monotonic
 address cursors, and pinned Android TLS hostname-verification patch.
 The user requested local Android Studio/Xcode builds; prefer the commands in
@@ -72,9 +72,9 @@ This is an independent Git repository. Firmware and LNbits may be checked out as
 siblings in `../firmware/` and `../lnbits/`; neither is a build/runtime dependency.
 Keep the local specification and protocol accurate when changing client behavior;
 coordinate wire-contract updates with the firmware repository's documentation.
-Stay Testnet4-only. Bitcoin custody, signing and approval policy remain on ESP32.
+Support Mainnet (default) and Testnet4; firmware network is build-time only and mobile must block signing on a mismatch. Bitcoin custody, signing and approval policy remain on ESP32.
 Preserve request-bound remote PIN handling, explicit broadcast confirmation,
-Testnet4 genesis checks, locally verified UTXOs/signatures/transaction identity,
+selected-network genesis checks, locally verified UTXOs/signatures/transaction identity,
 persisted address cursors and signed-payment recovery. Never log PINs or seeds.
 Preserve unrelated edits. Do not flash devices, erase storage, publish builds or
 broadcast transactions as part of ordinary source changes.

@@ -1,6 +1,6 @@
 # Argus mobile
 
-A **Testnet4-only** wallet client for Android and iOS, built with React Native
+A **Mainnet and Testnet4** wallet client for Android and iOS, built with React Native
 and Expo. It connects to an ESP32 remote signer over Nostr. **Bitcoin keys,
 transaction signing and approval policy stay on the ESP32.** Broadcasting always
 requires a separate confirmation in the app.
@@ -26,13 +26,13 @@ Settings shows the installed version/build beneath the Argus logo.
 - Payment amounts in recent activity and history; tap for addresses, fee, wallet
   balance change, confirmations and the full transaction ID. Sent amounts exclude
   change and fees; transfers within the wallet are labelled separately.
-- Local payment construction, coin control, send-max and Testnet4 fee estimates.
+- Local payment construction, coin control, send-max and network-specific fee estimates.
 - Verification of device signatures before finalization and broadcast.
 - Signed-payment recovery across restarts, plus optional PSBT import/export.
 
 This repository builds independently of both firmware and LNbits. To sign a
 payment, you need a provisioned ESP32 running compatible firmware, a reachable
-Nostr relay, and a Testnet4 Electrs endpoint. See the local
+Nostr relay, and an Electrs endpoint on the selected network. See the local
 [protocol](docs/protocol.md) and [delivery specification](docs/mobile-signer-spec.md).
 
 ## Quick start
@@ -53,30 +53,42 @@ For later JavaScript development, use `npm start`.
 
 ## Working wallet flow
 
+Mainnet is the default when no network has been saved, including on upgrade.
+Select **Settings → Bitcoin network → Mainnet / Testnet4** to match the device's
+build-time network. The device cannot change network from its own UI. A mismatch
+blocks signing with an explanation; the app never changes network automatically.
+Switching closes the device connection and clears in-memory wallet/payment state;
+reconnect afterwards. Signed payments must have a verified recovery copy before
+switching. Cursors, history and signed-payment journals remain per xpub and are
+restored when reconnecting to that account. Existing account pinning is retained;
+a firmware network change requires deliberate pairing with its new xpub.
+
+
 1. Open ESP32 **Settings → Connect Remote Client**. Scan/paste its QR in the app,
    compare the phone's full Nostr public key on the ESP32 and approve there.
    The independent phone transport key is held in OS-backed secure storage.
-2. In **Settings → Node settings**, configure your Testnet4 Electrs connection.
-   The default is `ssl://mempool.space:40002`; existing saved servers are retained.
+2. In **Settings → Node settings**, configure your Electrs connection for the selected network.
+   Defaults: Mainnet `ssl://mempool.space:50002`, Testnet4 `ssl://mempool.space:40002`.
+   Custom servers are saved separately; legacy saved servers remain under Testnet4.
    To use your own Electrs Electrum endpoint, enter
    `ssl://host:50002` for TLS with a system-trusted certificate, or
    `tcp://192.168.1.10:50001` for a trusted local network. Plain TCP exposes
    queries to the network. This field is not an Esplora HTTP API URL. Standard
    Electrs can sit behind a TLS proxy; accept-any-certificate mode is not offered.
 3. **Connect wallet**, then **Refresh balance**. The phone verifies
-   Testnet4's genesis, scans receive/change branches, and displays balances,
+   the selected network's genesis, scans receive/change branches, and displays balances,
    coins and transaction history. Electrs sees script hashes and supplies chain
    status; this is a server-trusting wallet, not SPV or a full node.
-4. Choose **Receive → Create receive address** and copy it to receive Testnet4 coins. Issued
+4. Choose **Receive → Create receive address** and copy it to receive coins on the selected network. Issued
    receive/change indices are persisted per xpub before exposure. Discovery uses
    a 20-address gap and a 1,000-address limit per branch; incomplete scans fail.
 5. Enter a recipient and amount in sats, or choose **Send maximum**. Use
    automatic largest-first selection or **Coin control** to select exact outputs.
    Unconfirmed inputs require an explicit opt-in; immature coinbase is excluded.
-6. **Get fee estimates** uses only mempool.space's Testnet4 recommended-fee
+6. **Get fee estimates** uses only mempool.space's selected-network recommended-fee
    endpoint. Choose a target or enter sat/vB manually (up to three decimals).
    Stale estimates require refresh after five minutes. API failures are shown;
-   no mainnet fallback is used. Confirmation targets are approximate.
+   no cross-network fallback is used. Confirmation targets are approximate.
 7. **Review payment** checks the selected coins again and builds
    the PSBT locally with full previous transactions and BIP84 derivations. Review
    recipients, verified change, wallet debit and the total fee. Dust remainder
@@ -95,7 +107,7 @@ For later JavaScript development, use `npm start`.
 
 PSBT file/base64 import and signed PSBT export remain optional tools. No payment
 construction, finalization or broadcasting is outsourced to LNbits. v1 firmware
-still restricts transactions to Testnet4, native SegWit BIP84 inputs, final
+restricts transactions to its compiled network, native SegWit BIP84 inputs, final
 sequences (no RBF), and at most 32 inputs/outputs and a 32 KiB unsigned PSBT.
 Full previous transactions can hit that size limit even with fewer inputs.
 
@@ -165,10 +177,10 @@ previous build. All other release checks remain enabled; recheck on upgrades.
 
 - `src/client.ts`: authenticated Nostr/NIP-44 device requests and PIN binding.
 - `src/electrum.ts` / `electrum-native.ts`: bounded Electrum 1.4 JSON-RPC,
-  connection/request timeouts and Testnet4 genesis verification over TCP/TLS.
+  connection/request timeouts and selected-network genesis verification over TCP/TLS.
 - `src/wallet.ts`: discovery, verified UTXOs, coin selection, fee/PSBT construction,
   signature-checked finalization, spend checks and explicit broadcast operations.
-- `src/fees.ts`: bounded, validated mempool.space Testnet4 estimates.
+- `src/fees.ts`: bounded, validated network-specific mempool.space estimates.
 - `src/bitcoin.ts`: original-transaction/UTXO/signature validation.
 - `src/wallet-storage.ts`: server/cursor preferences in SecureStore, and a
   public signed-payment recovery file in the app document sandbox (no PIN/seed).
@@ -364,3 +376,14 @@ Public download verification returned HTTP 403; the user confirmed ngrok's
 monthly bandwidth quota is exhausted. Delivery remains local and no verified
 public download notification was sent. Physical phone/ESP32 testing was not
 performed. No transaction was broadcast.
+
+## Mainnet / Testnet4 acceptance
+
+Automated tests cover account paths and xpub versions, addresses, transaction
+construction and signature verification on both networks; mismatch responses,
+wrong-network genesis rejection, and network-specific fee URLs. Firmware's
+native tests independently verify both networks against libwally fixtures.
+Physical ESP32/Android/iOS pairing, Settings switching/restart recovery and
+end-to-end signing remain unverified for this change. Exercise payment tests
+with disposable Testnet4 funds; no hardware was flashed or transaction broadcast
+as part of this source change.

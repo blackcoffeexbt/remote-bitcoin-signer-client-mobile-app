@@ -1,3 +1,4 @@
+import type { BitcoinNetwork } from './networks';
 import { createContext, useContext, useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
@@ -12,8 +13,8 @@ import { loadCursor, loadGapLimit, loadHistory, loadServer, saveCursor, saveGapL
 import { cacheHistory } from './history-cache';
 import { useClient } from './ClientProvider';
 
-type Props = { account: PublicAccount | null; disabled: boolean; paymentPending: boolean; autoRefreshAllowed: boolean; onBusyChange(busy: boolean): void; onPrepared(psbt: string): void; onInvalidate(): void };
-function useWalletState({ account, disabled, paymentPending, autoRefreshAllowed, onBusyChange, onPrepared, onInvalidate }: Props) {
+type Props = { network: BitcoinNetwork; account: PublicAccount | null; disabled: boolean; paymentPending: boolean; autoRefreshAllowed: boolean; onBusyChange(busy: boolean): void; onPrepared(psbt: string): void; onInvalidate(): void };
+function useWalletState({ network, account, disabled, paymentPending, autoRefreshAllowed, onBusyChange, onPrepared, onInvalidate }: Props) {
   const [server, setServer] = useState(''), [savedServer, setSavedServer] = useState('');
   const [gapLimit, setGapLimit] = useState(GAP), [gapInput, setGapInput] = useState(String(GAP));
   const [settingsReady, setSettingsReady] = useState(false), [status, setStatus] = useState(''), [error, setError] = useState('');
@@ -34,7 +35,7 @@ function useWalletState({ account, disabled, paymentPending, autoRefreshAllowed,
     const lifecycleGeneration = generation;
     let mounted = true;
     alive.current = true;
-    void Promise.all([loadServer(), loadGapLimit()]).then(([value, gap]) => { if (mounted) { setServer(value); setSavedServer(value); setGapLimit(gap); setGapInput(String(gap)); setSettingsReady(true); } }).catch(() => { if (mounted) setError('Could not load wallet preferences'); });
+    void Promise.all([loadServer(network), loadGapLimit()]).then(([value, gap]) => { if (mounted) { setServer(value); setSavedServer(value); setGapLimit(gap); setGapInput(String(gap)); setSettingsReady(true); } }).catch(() => { if (mounted) setError('Could not load wallet preferences'); });
     const subscription = AppState.addEventListener('change', state => {
       if (state !== 'active') { alive.current = false; lifecycleGeneration.current++; rpc.current?.close(); rpc.current = null; working.current = false; setBusy(false); onBusyChange(false); }
       else { alive.current = true; setLoadEpoch(value => value + 1); }
@@ -63,14 +64,14 @@ function useWalletState({ account, disabled, paymentPending, autoRefreshAllowed,
   };
   const connect = async (active: () => boolean) => {
     if (!savedServer || server.trim() !== savedServer) throw new Error('Save your Electrs server address first');
-    const client = new ElectrumClient(); rpc.current = client;
+    const client = new ElectrumClient(15000, network); rpc.current = client;
     await client.connect(savedServer, dialElectrum);
     if (!active()) { client.close(); throw new Error('Wallet interrupted'); }
     return client;
   };
   const invalidate = () => { onInvalidate(); setError(''); };
   const updateFees = () => void run(async active => {
-    const result = await fetchFees();
+    const result = await fetchFees(fetch, network);
     if (!active()) return;
     setFees(result); setStatus('Fees updated.');
     if (!rate || estimated) { setRate(String(result.hourFee)); setFeeTarget('hourFee'); setEstimated(true); invalidate(); }
@@ -118,7 +119,7 @@ function useWalletState({ account, disabled, paymentPending, autoRefreshAllowed,
   });
   let plan: Plan | null = null, planError = '';
   if (snapshot && destination && (amount || maximum) && rate) {
-    try { plan = planPayment(snapshot.coins, manual ? selected : null, destination, maximum ? 'max' : amount, rate, unconfirmed); }
+    try { plan = planPayment(snapshot.coins, manual ? selected : null, destination, maximum ? 'max' : amount, rate, unconfirmed, network); }
     catch (e) { planError = (e as Error).message; }
   }
   const prepare = () => account && snapshot && plan && !paymentPending && run(async active => {
@@ -135,7 +136,7 @@ function useWalletState({ account, disabled, paymentPending, autoRefreshAllowed,
     if (active()) { onPrepared(original); setStatus('Ready to review.'); }
   });
   const saveSettings = () => run(async active => {
-    const parsed = parseEndpoint(server.trim()); await saveServer(parsed.url);
+    const parsed = parseEndpoint(server.trim()); await saveServer(parsed.url, network);
     if (active()) { setServer(parsed.url); setSavedServer(parsed.url); setSnapshot(null); setReceive(''); invalidate(); setStatus('Server saved.'); }
   });
   const history = snapshot ?? (stored?.cache.server === savedServer ? { history: stored.history, height: stored.cache.height, syncedAt: stored.cache.syncedAt } : null);
@@ -146,13 +147,13 @@ function useWalletState({ account, disabled, paymentPending, autoRefreshAllowed,
 const Context = createContext<ReturnType<typeof useWalletState> | null>(null);
 function Session({ children }: { children: ReactNode }) {
   const c = useClient();
-  const value = useWalletState({ account: c.account, disabled: c.busy || c.chainBusy || (!!c.account && c.recovery !== 'ready'),
+  const value = useWalletState({ network: c.network, account: c.account, disabled: !c.ready || c.busy || c.chainBusy || (!!c.account && c.recovery !== 'ready'),
     paymentPending: !!c.signed, autoRefreshAllowed: (!c.review || !!c.signed) && c.foreground,
     onBusyChange: c.setChainBusy, onPrepared: c.prepare, onInvalidate: c.invalidate });
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function WalletProvider({ children }: { children: ReactNode }) {
   const c = useClient();
-  return <Session key={c.account?.xpub ?? 'unpaired'}>{children}</Session>;
+  return <Session key={`${c.network}:${c.account?.xpub ?? 'unpaired'}`}>{children}</Session>;
 }
 export function useWallet() { const value = useContext(Context); if (!value) throw new Error('Missing wallet session'); return value; }

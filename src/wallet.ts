@@ -1,5 +1,7 @@
+import { accountNetwork, DEFAULT_NETWORK, NETWORKS } from './networks.ts';
+import type { BitcoinNetwork } from './networks.ts';
 import { Buffer } from 'buffer';
-import { Psbt, Transaction, address, networks, payments } from 'bitcoinjs-lib';
+import { Psbt, Transaction, address, payments } from 'bitcoinjs-lib';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { accountKey, hex, reviewPsbt, verifySignedPsbt } from './bitcoin.ts';
 import type { PublicAccount } from './protocol.ts';
@@ -30,7 +32,7 @@ export const outpoint = (c: { txid: string; vout: number }) => `${c.txid}:${c.vo
 export function deriveAddress(account: PublicAccount, branch: 0 | 1, index: number): WalletAddress {
   if ((branch !== 0 && branch !== 1) || !Number.isSafeInteger(index) || index < 0 || index >= MAX_INDEX) throw new Error('Address scan limit reached (1,000 per branch)');
   const key = accountKey(account).deriveChild(branch).deriveChild(index).publicKey!;
-  const p = payments.p2wpkh({ pubkey: key, network: networks.testnet });
+  const p = payments.p2wpkh({ pubkey: key, network: NETWORKS[accountNetwork(account)].bitcoin });
   return { branch, index, address: p.address!, script: hex(p.output!), scripthash: hex(sha256(p.output!).reverse()), pubkey: hex(key), path: `${account.path}/${branch}/${index}` };
 }
 export function validateCursor(v: AddressCursor, gapLimit = GAP): AddressCursor {
@@ -114,9 +116,9 @@ export async function syncWallet(rpc: Rpc, account: PublicAccount, cursor: Addre
     transactions.push({ txid, height: h, raw: rawCache.get(txid) ?? await getRaw(txid, h) });
   }
   return { xpub: account.xpub, height, syncedAt: Date.now(), coins, addresses, next, lastUsed, transactions,
-    history: summarizeHistory(transactions, addresses) };
+    history: summarizeHistory(transactions, addresses, accountNetwork(account)) };
 }
-export function summarizeHistory(records: HistoryTransaction[], addresses: Pick<WalletAddress, 'script'>[]): HistoryEntry[] {
+export function summarizeHistory(records: HistoryTransaction[], addresses: Pick<WalletAddress, 'script'>[], network: BitcoinNetwork = DEFAULT_NETWORK): HistoryEntry[] {
   // Index spent as well as unspent wallet outputs. Current UTXOs alone cannot
   // tell a payment from change or recover amounts for older transactions.
   const scripts = new Set(addresses.map(a => a.script));
@@ -132,7 +134,7 @@ export function summarizeHistory(records: HistoryTransaction[], addresses: Pick<
       const owned = scripts.has(hex(output.script));
       if (owned) ownedOutputs.set(`${txid}:${vout}`, output.value);
       let destination: string | null = null;
-      try { destination = address.fromOutputScript(output.script, networks.testnet); } catch { /* Non-address output. */ }
+      try { destination = address.fromOutputScript(output.script, NETWORKS[network].bitcoin); } catch { /* Non-address output. */ }
       return { address: destination, value: output.value, owned };
     });
     transactions.push({ txid, height: h, outputs, inputs: tx.isCoinbase() ? [] : tx.ins.map(input => `${hex(Uint8Array.from(input.hash).reverse())}:${input.index}`) });
@@ -156,7 +158,7 @@ export function cachedHistory(cache: HistoryCache, account: PublicAccount): Hist
   if (cache.xpub !== account.xpub) throw new Error('Wrong wallet history');
   const addresses = ([0, 1] as const).flatMap(branch => Array.from(
     { length: cache.addressCounts[branch === 0 ? 'receive' : 'change'] }, (_, index) => deriveAddress(account, branch, index)));
-  return summarizeHistory(cache.transactions, addresses);
+  return summarizeHistory(cache.transactions, addresses, accountNetwork(account));
 }
 
 export function sats(text: string) {
@@ -170,9 +172,9 @@ export function feeRate(text: string): bigint {
   if (rate < 1n || rate > 10000000n) throw new Error('Fee rate must be 0.001–10,000 sat/vB');
   return rate;
 }
-export function recipientScript(destination: string) {
+export function recipientScript(destination: string, network: BitcoinNetwork = DEFAULT_NETWORK) {
   let script: Uint8Array;
-  try { script = address.toOutputScript(destination.trim(), networks.testnet); } catch { throw new Error('Enter a valid Testnet4 recipient address'); }
+  try { script = address.toOutputScript(destination.trim(), NETWORKS[network].bitcoin); } catch { throw new Error(`Enter a valid ${network} recipient address`); }
   if (!/^(76a914[0-9a-f]{40}88ac|a914[0-9a-f]{40}87|0014[0-9a-f]{40}|0020[0-9a-f]{64})$/.test(hex(script))) throw new Error('Device supports legacy and SegWit v0 recipients; Taproot is not supported');
   return script;
 }
@@ -183,8 +185,8 @@ export function estimatedVsize(inputs: number, scripts: Uint8Array[]) {
   return Math.ceil((base * 4 + 2 + 109 * inputs) / 4);
 }
 export type Plan = { coins: Coin[]; destination: string; amount: bigint; fee: bigint; change: bigint; vsize: number; rate: string };
-export function planPayment(available: Coin[], selected: string[] | null, destination: string, amountText: string, rateText: string, allowUnconfirmed = false): Plan {
-  const output = recipientScript(destination), rate = feeRate(rateText);
+export function planPayment(available: Coin[], selected: string[] | null, destination: string, amountText: string, rateText: string, allowUnconfirmed = false, network: BitcoinNetwork = DEFAULT_NETWORK): Plan {
+  const output = recipientScript(destination, network), rate = feeRate(rateText);
   const eligible = available.filter(c => (!c.coinbase || c.confirmations >= 100) && (allowUnconfirmed || c.confirmations > 0));
   const keys = new Set(selected ?? []);
   if (selected && (keys.size !== selected.length || !selected.length)) throw new Error('Select at least one coin');
@@ -228,7 +230,7 @@ export async function checkUnspent(rpc: Rpc, coins: Coin[]) {
 }
 export function buildPsbt(account: PublicAccount, plan: Plan, change: WalletAddress, knownAddresses: WalletAddress[]): string {
   if (!plan.coins.length || plan.coins.length > 32) throw new Error('Invalid input count');
-  const p = new Psbt({ network: networks.testnet }).setVersion(2).setLocktime(0);
+  const p = new Psbt({ network: NETWORKS[accountNetwork(account)].bitcoin }).setVersion(2).setLocktime(0);
   const derivation = (a: WalletAddress) => [{ masterFingerprint: Buffer.from(account.fingerprint, 'hex'), pubkey: Buffer.from(a.pubkey, 'hex'), path: a.path }];
   for (const c of plan.coins) {
     const expected = deriveAddress(account, c.branch, c.index);
@@ -236,7 +238,7 @@ export function buildPsbt(account: PublicAccount, plan: Plan, change: WalletAddr
     verifyCoin(expected, { tx_hash: c.txid, tx_pos: c.vout, value: Number(c.value), height: c.height }, c.raw, c.height + c.confirmations - 1);
     p.addInput({ hash: c.txid, index: c.vout, sequence: 0xffffffff, nonWitnessUtxo: Buffer.from(c.raw, 'hex'), witnessUtxo: { script: Buffer.from(c.script, 'hex'), value: c.value }, sighashType: 1, bip32Derivation: derivation(expected) });
   }
-  const script = recipientScript(plan.destination), own = knownAddresses.find(a => a.script === hex(script));
+  const script = recipientScript(plan.destination, accountNetwork(account)), own = knownAddresses.find(a => a.script === hex(script));
   p.addOutput({ script, value: plan.amount, ...(own ? { bip32Derivation: derivation(own) } : {}) });
   if (plan.change > 0n) {
     const expected = deriveAddress(account, 1, change.index);
@@ -249,7 +251,7 @@ export function buildPsbt(account: PublicAccount, plan: Plan, change: WalletAddr
 }
 export function finalizePayment(original: string, signed: string, account: PublicAccount) {
   const verified = verifySignedPsbt(original, signed, account);
-  const p = Psbt.fromBase64(verified, { network: networks.testnet });
+  const p = Psbt.fromBase64(verified, { network: NETWORKS[accountNetwork(account)].bitcoin });
   p.finalizeAllInputs();
   const tx = p.extractTransaction(true), review = reviewPsbt(original, account);
   return { raw: tx.toHex(), txid: tx.getId(), vsize: tx.virtualSize(), fee: review.fee, feeRate: Number(review.fee) / tx.virtualSize(), review };
@@ -273,7 +275,7 @@ export async function broadcastPayment(rpc: Rpc, original: string, signed: strin
 }
 export async function checkPsbtUnspent(rpc: Rpc, original: string, account: PublicAccount) {
   reviewPsbt(original, account);
-  const p = Psbt.fromBase64(original, { network: networks.testnet }), tip = await tipHeight(rpc);
+  const p = Psbt.fromBase64(original, { network: NETWORKS[accountNetwork(account)].bitcoin }), tip = await tipHeight(rpc);
   for (let i = 0; i < p.inputCount; i++) {
     const d = p.data.inputs[i].bip32Derivation![0], parts = d.path.split('/');
     const a = deriveAddress(account, Number(parts[4]) as 0 | 1, Number(parts[5]));

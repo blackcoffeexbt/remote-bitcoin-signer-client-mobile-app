@@ -19,6 +19,9 @@ export function approvalStatus(status: string, pinRequired: boolean) {
 export function walletError(value: unknown): string {
   const message = value instanceof Error ? value.message : String(value || '');
   if (!message) return '';
+  if (/^Save or export this signed payment before changing Bitcoin network/.test(message)) return 'Your signed payment has not been safely saved. Export it or resolve the storage problem before changing Bitcoin network.';
+  if (/Network changed while away/.test(message)) return 'Restart the app to reload your Bitcoin network setting.';
+  if (/Firmware network changed/.test(message)) return 'Unlock the signing device locally to refresh its account, then pair again for the new network.';
   if (/Address gap limit must/i.test(message)) return 'Enter a whole number from 20 to 200 for the address gap limit.';
   if (/Unused address gap limit/i.test(message)) return 'Use an existing address and refresh, or increase the address gap limit in Advanced settings.';
   if (/Address scan limit reached for the selected gap limit/i.test(message)) return 'This gap limit exceeds the remaining address scan range. Choose a smaller gap limit in Advanced settings.';
@@ -26,14 +29,18 @@ export function walletError(value: unknown): string {
   if (/PIN|cooldown/i.test(message)) return /cooldown/i.test(message) ? 'Please wait before trying your device PIN again.' : 'Check your wallet PIN and try again on your signing device.';
   if (/insufficient|Select at least|Choose between|32 spendable|selected coin/i.test(message)) return 'Choose enough available coins to cover the payment and network fee.';
   if (/dust|positive whole-satoshi|recipient amount/i.test(message)) return 'Enter a valid amount that is large enough to send.';
-  if (/recipient|Taproot/i.test(message)) return 'Check the recipient address. Use a Testnet4 legacy or SegWit address.';
+  if (/recipient|Taproot/i.test(message)) return 'Check the recipient address. Use a legacy or SegWit address for the selected Bitcoin network.';
   if (/Fee rate|fee estimates.*old/i.test(message)) return 'Choose a current network fee or enter a valid custom rate.';
   if (/mempool.space|fee response|Fee response|fee estimates/i.test(message)) return 'Fee estimates are unavailable. Try again or choose a custom fee.';
-  if (/not on Bitcoin Testnet4/i.test(message)) return 'This server is on a different Bitcoin network. Choose a Testnet4 Electrs server in Node settings.';
+  if (/Bitcoin network mismatch/i.test(message)) {
+    const networks = /app is on (Mainnet|Testnet4), device is on (Mainnet|Testnet4)/.exec(message);
+    return `Bitcoin network mismatch${networks ? `: app is on ${networks[1]}, device is on ${networks[2]}` : ''}. Signing is blocked. Match the device in Settings > Bitcoin network.`;
+  }
+  if (/not on Bitcoin (Mainnet|Testnet4)/i.test(message)) return 'This server is on a different Bitcoin network. Choose a matching Electrs server in Node settings.';
   if (/spent|lost confirmations|immature|mature/i.test(message)) return 'Some coins are no longer available. Refresh your wallet and review the payment again.';
   if (/snapshot.*old|Sync.*wallet/i.test(message)) return 'Refresh your balance before creating this payment.';
   if (/20 unused|Address.*limit|discovery|exceeds.*limit|oversized wallet|1,000/i.test(message)) return 'Wallet address limit reached. Use an existing address and refresh, or check your wallet with your server administrator.';
-  if (/timed out|timeout|uncertain|Stopped waiting/i.test(message)) return 'The connection was interrupted. Check your device and payment status before trying again.';
+  if (/timed out|timeout|uncertain|Stopped waiting/i.test(message)) return 'The connection was interrupted. Check Settings > Bitcoin network matches the device, and check your device and payment status before trying again.';
   if (/pairing|label/i.test(message)) return 'Check the pairing code and phone name, then try again.';
   if (/account changed|Foreign|verify|verified|Invalid Bitcoin|different transaction|signature|previous transaction|Coin amount|PSBT|recovery|saved payment/i.test(message)) return 'This payment or wallet could not be verified. Nothing new has been sent. Check your device and payment history before continuing.';
   if (/storage|save|preserve|commit payment/i.test(message)) return 'Could not save this payment. Check free space and unlock your phone before trying again.';

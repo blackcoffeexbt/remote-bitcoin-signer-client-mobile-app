@@ -1,3 +1,4 @@
+import type { BitcoinNetwork } from '../src/networks.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Event } from 'nostr-tools/core';
@@ -15,10 +16,10 @@ class FakeSocket implements Socket {
   open() { this.readyState = 1; this.onopen?.(); }
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function setup(seconds = 150) {
+function setup(seconds = 150, network: BitcoinNetwork = 'Testnet4') {
   const device = generateSecretKey(), phone = generateSecretKey();
   const pubkey = getPublicKey(device), sockets: FakeSocket[] = [], states: ClientState[] = [];
-  const c = new SignerClient({ secret: phone, connection: { pubkey, relays: ['wss://one.example', 'wss://two.example'] }, requestSeconds: seconds,
+  const c = new SignerClient({ network, secret: phone, connection: { pubkey, relays: ['wss://one.example', 'wss://two.example'] }, requestSeconds: seconds,
     socket: () => { const s = new FakeSocket(); sockets.push(s); return s; }, onState: s => states.push(s) });
   c.connect(); sockets.forEach(s => s.open());
   const key = nip44.utils.getConversationKey(device, c.clientKey);
@@ -132,3 +133,40 @@ test('cooldown refusal re-enables PIN only for the still-active signing request'
     t.c.close(); await cancelled;
   } finally { t.c.close(); }
 });
+
+for (const network of ['Mainnet', 'Testnet4'] as const) {
+  test(`${network}: signing completes only with a matching authenticated account`, async () => {
+    const f = fixture(network), h = setup(150, network);
+    try {
+      const result = h.c.sign(f.unsigned);
+      assert.equal(h.request().network, network);
+      h.response(h.request(), { result: f.account }); await flush();
+      assert.equal(h.request().method, 'sign_psbt');
+      h.response(h.request(), { result: { psbt: f.signed } });
+      assert.equal(await result, f.signed);
+    } finally { h.c.close(); }
+  });
+  test(`${network}: mismatch errors are authenticated and request-bound; other-network results cannot authorize signing`, async () => {
+    const other = network === 'Mainnet' ? 'Testnet4' : 'Mainnet', h = setup(150, network);
+    try {
+      const result = h.c.sign(fixture(network).unsigned), failure = assert.rejects(result, /network mismatch.*Signing is blocked/);
+      const request = h.request();
+      h.response(request, { network: other, result: fixture(other).account }); await flush();
+      assert.equal(h.request().method, 'get_account');
+      h.response(request, { network: other, id: 'f'.repeat(32), error: 'mismatch' }); await flush();
+      assert.equal(h.request().method, 'get_account');
+      h.response(request, { network: other, error: 'mismatch' }, generateSecretKey()); await flush();
+      assert.equal(h.request().method, 'get_account');
+      h.response(request, { network: other, error: 'mismatch' }); await failure;
+      assert.equal(h.states.some(s => s.pinRequired), false);
+    } finally { h.c.close(); }
+  });
+  test(`${network}: an account from the other network is rejected even inside a matching envelope`, async () => {
+    const h = setup(150, network);
+    try {
+      const result = h.c.sign(fixture(network).unsigned), failure = assert.rejects(result, /network mismatch/);
+      h.response(h.request(), { result: fixture(network === 'Mainnet' ? 'Testnet4' : 'Mainnet').account });
+      await failure; assert.equal(h.request().method, 'get_account');
+    } finally { h.c.close(); }
+  });
+}

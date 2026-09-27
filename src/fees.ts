@@ -1,4 +1,6 @@
-export const FEE_URL = 'https://mempool.space/testnet4/api/v1/fees/recommended';
+import { DEFAULT_NETWORK, NETWORKS } from './networks.ts';
+import type { BitcoinNetwork } from './networks.ts';
+export const FEE_URL = NETWORKS[DEFAULT_NETWORK].fees;
 export type Fees = { fastestFee: number; halfHourFee: number; hourFee: number; economyFee: number; minimumFee: number; fetchedAt: number };
 export function validateFees(value: unknown, now = Date.now()): Fees {
   if (!value || typeof value !== 'object') throw new Error('Invalid mempool.space fee response');
@@ -9,11 +11,11 @@ export function validateFees(value: unknown, now = Date.now()): Fees {
   if (v.fastestFee < v.halfHourFee || v.halfHourFee < v.hourFee || v.hourFee < v.economyFee || v.economyFee < v.minimumFee) throw new Error('Inconsistent fee estimates');
   return { fastestFee: v.fastestFee, halfHourFee: v.halfHourFee, hourFee: v.hourFee, economyFee: v.economyFee, minimumFee: v.minimumFee, fetchedAt: now };
 }
-export async function fetchFees(fetcher: typeof fetch = fetch): Promise<Fees> {
+export async function fetchFees(fetcher: typeof fetch = fetch, network: BitcoinNetwork = DEFAULT_NETWORK): Promise<Fees> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
-    const response = await fetcher(FEE_URL, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    const response = await fetcher(NETWORKS[network].fees, { signal: controller.signal, headers: { Accept: 'application/json' } });
     if (!response.ok) throw new Error(`mempool.space unavailable (${response.status}). Retry or enter a fee rate manually.`);
     const body = await response.text();
     if (body.length > 4096) throw new Error('Fee response too large');

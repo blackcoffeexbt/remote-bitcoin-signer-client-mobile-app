@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'buffer';
 import { Psbt, Transaction, address, networks } from 'bitcoinjs-lib';
 import { fixture } from './fixtures.ts';
-import { buildPsbt, broadcastPayment, checkPsbtUnspent, checkUnspent, deriveAddress, estimatedVsize, feeRate, finalizePayment, outpoint, parseGapLimit, planPayment, recipientScript, sats, syncWallet, transactionKnown, validateCursor, verifyCoin } from '../src/wallet.ts';
+import { buildPsbt, broadcastPayment, checkPsbtUnspent, checkUnspent, deriveAddress, estimatedVsize, feeRate, finalizePayment, outpoint, parseGapLimit, planPayment as planForNetwork, recipientScript as scriptForNetwork, sats, syncWallet, transactionKnown, validateCursor, verifyCoin } from '../src/wallet.ts';
 import type { Coin } from '../src/wallet.ts';
 import type { Rpc } from '../src/electrum.ts';
 import { reviewPsbt } from '../src/bitcoin.ts';
 import { cacheHistory } from '../src/history-cache.ts';
 
+// Existing adversarial fixtures exercise Testnet4 explicitly.
+const planPayment = (...args: Parameters<typeof planForNetwork>) => planForNetwork(args[0], args[1], args[2], args[3], args[4], args[5], 'Testnet4');
+const recipientScript = (address: string) => scriptForNetwork(address, 'Testnet4');
 function setup() {
   const f = fixture(), a = deriveAddress(f.account, 0, 0);
   const raw = Buffer.from(f.psbt.data.inputs[0].nonWitnessUtxo!).toString('hex');

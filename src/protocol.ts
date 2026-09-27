@@ -1,7 +1,8 @@
+import type { BitcoinNetwork } from './networks.ts';
 /** Current firmware wire contract. Types alone do not authenticate relay input. */
 export const PROTOCOL = 'bitcoin-signer' as const;
 export const VERSION = 1 as const;
-export const NETWORK = 'Testnet4' as const;
+export { DEFAULT_NETWORK as NETWORK } from './networks.ts';
 export const EVENT_KIND = 24134;
 export const REQUEST_SECONDS = 150;
 export const MAX_PSBT_BYTES = 32_768;
@@ -13,7 +14,7 @@ export type Params = {
   unlock: { session: string; request_id: string; pin: string };
 };
 export type Binding<M extends Method = Method> = {
-  protocol: typeof PROTOCOL; version: typeof VERSION; network: typeof NETWORK;
+  protocol: typeof PROTOCOL; version: typeof VERSION; network: BitcoinNetwork;
   id: string; method: M; psbt_hash: string;
 };
 export type Request = {

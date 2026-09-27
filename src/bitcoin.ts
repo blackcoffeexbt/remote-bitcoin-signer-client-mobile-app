@@ -1,5 +1,6 @@
+import { accountNetwork, NETWORKS } from './networks.ts';
 import { Buffer } from 'buffer';
-import { Psbt, Transaction, address, networks, payments } from 'bitcoinjs-lib';
+import { Psbt, Transaction, address, payments } from 'bitcoinjs-lib';
 import { HDKey } from '@scure/bip32';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -7,20 +8,20 @@ import type { PublicAccount } from './protocol.ts';
 
 export const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 const equal = (a: Uint8Array, b: Uint8Array) => hex(a) === hex(b);
-const versions = { public: 0x043587cf, private: 0x04358394 };
+const bitcoinNetwork = (account: PublicAccount) => NETWORKS[accountNetwork(account)].bitcoin;
 export function accountKey(account: PublicAccount) {
-  const key = HDKey.fromExtendedKey(account.xpub, versions);
+  const key = HDKey.fromExtendedKey(account.xpub, bitcoinNetwork(account).bip32);
   if (key.privateKey || key.depth !== 3 || key.index !== 0x80000000) throw new Error('Unsupported public account');
   return key;
 }
 export function validateAccount(value: unknown): PublicAccount {
   if (!value || typeof value !== 'object') throw new Error('Invalid public account');
   const a = value as PublicAccount;
-  if (typeof a.fingerprint !== 'string' || typeof a.session !== 'string' || a.path !== "m/84'/1'/0'" || !/^[0-9a-f]{8}$/.test(a.fingerprint) ||
+  if (typeof a.fingerprint !== 'string' || typeof a.session !== 'string' || (a.path !== NETWORKS.Mainnet.path && a.path !== NETWORKS.Testnet4.path) || !/^[0-9a-f]{8}$/.test(a.fingerprint) ||
     !/^[0-9a-f]{32}$/.test(a.session) || typeof a.xpub !== 'string' || a.xpub.length > 120 ||
     typeof a.descriptor !== 'string' || a.descriptor.length > 1024) throw new Error('Unsupported signer account');
   accountKey(a);
-  const descriptor = `wpkh([${a.fingerprint}/84h/1h/0h]${a.xpub}/<0;1>/*)`;
+  const descriptor = `wpkh([${a.fingerprint}/84h/${NETWORKS[accountNetwork(a)].coinType}h/0h]${a.xpub}/<0;1>/*)`;
   if (!a.descriptor.startsWith(descriptor + '#') || !/^[a-z0-9]{8}$/.test(a.descriptor.slice(descriptor.length + 1))) {
     throw new Error('Descriptor does not match public account');
   }
@@ -28,7 +29,7 @@ export function validateAccount(value: unknown): PublicAccount {
 }
 export function receiveAddress(account: PublicAccount, index = 0) {
   if (!Number.isSafeInteger(index) || index < 0 || index >= 0x80000000) throw new Error('Invalid address index');
-  return payments.p2wpkh({ pubkey: accountKey(account).deriveChild(0).deriveChild(index).publicKey!, network: networks.testnet }).address!;
+  return payments.p2wpkh({ pubkey: accountKey(account).deriveChild(0).deriveChild(index).publicKey!, network: bitcoinNetwork(account) }).address!;
 }
 export function psbtBytes(text: string, max = 32768): Uint8Array {
   if (!text || text.length > Math.ceil(max / 3) * 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(text)) throw new Error('Invalid or oversized base64 PSBT');
@@ -39,15 +40,16 @@ export function psbtBytes(text: string, max = 32768): Uint8Array {
 export function psbtHash(text: string) { return hex(sha256(psbtBytes(text))); }
 function ownedScript(account: PublicAccount, derivation: { path: string; pubkey: Uint8Array; masterFingerprint: Uint8Array }) {
   if (hex(derivation.masterFingerprint) !== account.fingerprint) throw new Error('Foreign wallet fingerprint');
-  const match = /^m\/84'\/1'\/0'\/([01])\/(0|[1-9][0-9]*)$/.exec(derivation.path);
+  const match = /^(?:m\/84'\/[01]'\/0')\/([01])\/(0|[1-9][0-9]*)$/.exec(derivation.path);
+  if (!derivation.path.startsWith(account.path + "/")) throw new Error('Wrong account path');
   if (!match || Number(match[2]) >= 0x80000000) throw new Error('Unsupported key derivation');
   const publicKey = accountKey(account).deriveChild(Number(match[1])).deriveChild(Number(match[2])).publicKey!;
   if (!equal(publicKey, derivation.pubkey)) throw new Error('Public key does not match the paired account');
-  return payments.p2wpkh({ pubkey: publicKey, network: networks.testnet }).output!;
+  return payments.p2wpkh({ pubkey: publicKey, network: bitcoinNetwork(account) }).output!;
 }
 export type Review = { outputs: { address: string; sats: string; change: boolean }[]; fee: string; debit: string; inputs: number };
 export function reviewPsbt(text: string, account: PublicAccount): Review {
-  const p = Psbt.fromBuffer(psbtBytes(text), { network: networks.testnet });
+  const p = Psbt.fromBuffer(psbtBytes(text), { network: bitcoinNetwork(account) });
   if (p.version !== 2 || p.locktime !== 0 || p.inputCount < 1 || p.inputCount > 32 || p.txOutputs.length < 1 || p.txOutputs.length > 32) throw new Error('Unsupported transaction: use PSBT v0, version 2, zero locktime and at most 32 inputs/outputs');
   let total = 0n;
   const spent = new Set<string>();
@@ -78,15 +80,15 @@ export function reviewPsbt(text: string, account: PublicAccount): Review {
     }
     outputTotal += output.value;
     if (!change) recipients += output.value;
-    return { address: address.fromOutputScript(output.script, networks.testnet), sats: output.value.toString(), change };
+    return { address: address.fromOutputScript(output.script, bitcoinNetwork(account)), sats: output.value.toString(), change };
   });
   if (outputTotal > total || total > 2100000000000000n) throw new Error('Invalid transaction amounts');
   return { outputs, fee: (total - outputTotal).toString(), debit: (recipients + total - outputTotal).toString(), inputs: p.inputCount };
 }
 export function verifySignedPsbt(original: string, signed: string, account: PublicAccount): string {
   reviewPsbt(original, account);
-  const a = Psbt.fromBuffer(psbtBytes(original), { network: networks.testnet });
-  const b = Psbt.fromBuffer(psbtBytes(signed, 45000), { network: networks.testnet });
+  const a = Psbt.fromBuffer(psbtBytes(original), { network: bitcoinNetwork(account) });
+  const b = Psbt.fromBuffer(psbtBytes(signed, 45000), { network: bitcoinNetwork(account) });
   if (!equal(a.data.globalMap.unsignedTx.toBuffer(), b.data.globalMap.unsignedTx.toBuffer())) throw new Error('Device returned a different transaction');
   // Only accept added partial signatures: revalidate them using ORIGINAL UTXOs.
   b.data.inputs.forEach((input, i) => {

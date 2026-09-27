@@ -27,17 +27,17 @@ test('parses Electrs TCP/TLS settings, including IPv6, without HTTP or credentia
   for (const v of ['https://example.com/api', 'tcp://host', 'ssl://u:p@host:50002', 'ssl://host:50002/path', 'ssl://host:50002?x', 'ssl://host:70000', 'ssl://host:50002#x']) assert.throws(() => parseEndpoint(v));
 });
 test('handshake verifies the actual Testnet4 genesis header before wallet requests', async () => {
-  const wire = transport(), c = new ElectrumClient();
+  const wire = transport(), c = new ElectrumClient(15000, 'Testnet4');
   await assert.rejects(c.request('blockchain.scripthash.listunspent', []), /verified/);
   await c.connect('ssl://example.com:50002', wire.dial);
   assert.deepEqual(wire.requests.map(r => r.method), ['server.version', 'blockchain.block.header']);
   c.close(); assert.equal(wire.closed(), true);
-  const wrong = transport('00'.repeat(80)), bad = new ElectrumClient();
+  const wrong = transport('00'.repeat(80)), bad = new ElectrumClient(15000, 'Testnet4');
   await assert.rejects(bad.connect('ssl://example.com:50002', wrong.dial), /Testnet4/);
   assert.equal(wrong.closed(), true);
 });
 test('handles fragmented, concatenated and out-of-order replies bound to request IDs', async () => {
-  const wire = transport(), c = new ElectrumClient(); await c.connect('tcp://host:50001', wire.dial);
+  const wire = transport(), c = new ElectrumClient(15000, 'Testnet4'); await c.connect('tcp://host:50001', wire.dial);
   const one = c.request('a'), two = c.request('b');
   const a = wire.requests.at(-2)!, b = wire.requests.at(-1)!;
   const lines = JSON.stringify({ id: b.id, result: 'two' }) + '\n' + JSON.stringify({ id: a.id, result: 'one' }) + '\n';
@@ -45,14 +45,14 @@ test('handles fragmented, concatenated and out-of-order replies bound to request
   assert.equal(await one, 'one'); assert.equal(await two, 'two'); c.close();
 });
 test('server errors are bounded and a request timeout closes all pending work', async () => {
-  const wire = transport(), c = new ElectrumClient(20); await c.connect('tcp://host:50001', wire.dial);
+  const wire = transport(), c = new ElectrumClient(20, 'Testnet4'); await c.connect('tcp://host:50001', wire.dial);
   const p = c.request('missing'); const failure = assert.rejects(p, /Electrs: not found/);
   wire.incoming(JSON.stringify({ id: wire.requests.at(-1)!.id, error: { message: 'not found' } }) + '\n'); await failure;
   await assert.rejects(c.request('offline'), /timed out/); assert.equal(wire.closed(), true);
 });
 test('malformed and oversized replies terminate instead of resolving wallet operations', async () => {
   for (const frame of ['not json\n', 'x'.repeat(2100001)]) {
-    const wire = transport(), c = new ElectrumClient(); await c.connect('tcp://host:50001', wire.dial);
+    const wire = transport(), c = new ElectrumClient(15000, 'Testnet4'); await c.connect('tcp://host:50001', wire.dial);
     const p = c.request('coins'), failure = assert.rejects(p);
     wire.incoming(frame); await failure; assert.equal(wire.closed(), true);
   }
@@ -60,6 +60,23 @@ test('malformed and oversized replies terminate instead of resolving wallet oper
 test('connection attempts time out and can be explicitly cancelled', async () => {
   const c = new ElectrumClient(10);
   await assert.rejects(c.connect('tcp://host:50001', () => ({ write() {}, close() {} })), /timed out/);
-  const d = new ElectrumClient(), promise = d.connect('tcp://host:50001', () => ({ write() {}, close() {} }));
+  const d = new ElectrumClient(15000, 'Testnet4'), promise = d.connect('tcp://host:50001', () => ({ write() {}, close() {} }));
   d.close(); await assert.rejects(promise, /disconnected/);
+});
+
+function mainnetGenesis() {
+  const header = Buffer.alloc(80); header.writeInt32LE(1);
+  Buffer.from('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b', 'hex').reverse().copy(header, 36);
+  header.writeUInt32LE(1231006505, 68); header.writeUInt32LE(0x1d00ffff, 72); header.writeUInt32LE(2083236893, 76);
+  return header.toString('hex');
+}
+test('Mainnet is the default and each network rejects the other genesis before queries or broadcast', async () => {
+  const main = new ElectrumClient(), wire = transport(mainnetGenesis());
+  assert.equal(main.network, 'Mainnet'); await main.connect('ssl://host:50002', wire.dial); main.close();
+  for (const network of ['Mainnet', 'Testnet4'] as const) {
+    const c = new ElectrumClient(15000, network), wrong = transport(network === 'Mainnet' ? genesis() : mainnetGenesis());
+    await assert.rejects(c.connect('ssl://host:50002', wrong.dial), new RegExp(network));
+    await assert.rejects(c.request('blockchain.transaction.broadcast', ['00']), /verified/);
+    assert.deepEqual(wrong.requests.map(r => r.method), ['server.version', 'blockchain.block.header']);
+  }
 });

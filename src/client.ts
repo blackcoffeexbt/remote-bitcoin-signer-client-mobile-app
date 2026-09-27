@@ -1,3 +1,5 @@
+import { accountNetwork, DEFAULT_NETWORK, isNetwork, networkMismatch } from './networks.ts';
+import type { BitcoinNetwork } from './networks.ts';
 import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import { v2 as nip44 } from 'nostr-tools/nip44';
 import type { Event } from 'nostr-tools/core';
@@ -50,7 +52,7 @@ export class SignerClient {
   private options: {
     secret: Uint8Array; connection: Connection; onState?: (state: ClientState) => void;
     socket?: (url: string) => Socket; now?: () => number; random?: (length: number) => Uint8Array;
-    requestSeconds?: number;
+    requestSeconds?: number; network?: BitcoinNetwork;
   };
   constructor(options: SignerClient['options']) {
     this.options = options;
@@ -111,9 +113,15 @@ export class SignerClient {
       const r = JSON.parse(clear); clear = '';
       const p = r && this.pending.get(r.id);
       if (!p || this.now() >= p.expires || r.protocol !== 'bitcoin-signer' || r.version !== 1 ||
-        r.network !== 'Testnet4' || r.method !== p.method || r.psbt_hash !== p.hash) return;
+        r.method !== p.method || r.psbt_hash !== p.hash) return;
       const variants = ['result', 'error', 'status'].filter(k => Object.prototype.hasOwnProperty.call(r, k));
       if (variants.length !== 1) return;
+      if (r.network !== (this.options.network ?? DEFAULT_NETWORK)) {
+        // Only authenticated, fully request-bound errors may explain a mismatch.
+        if (isNetwork(r.network) && typeof r.error === 'string' && r.error.length > 0 && r.error.length <= 500)
+          this.settle(r.id, new Error(networkMismatch(this.options.network ?? DEFAULT_NETWORK, r.network)));
+        return;
+      }
       if (r.status !== undefined) {
         if (p.method !== 'sign_psbt' || typeof r.status !== 'string' || !statuses[r.status] ||
           statuses[r.status] !== r.sequence || r.sequence <= p.sequence) return;
@@ -145,7 +153,7 @@ export class SignerClient {
     let event: Event;
     try {
       event = finalizeEvent({ kind: 24134, created_at: now, tags: [['p', this.options.connection.pubkey]],
-        content: nip44.encrypt(JSON.stringify({ protocol: 'bitcoin-signer', version: 1, network: 'Testnet4', id, method, expires: Math.floor(expires / 1000), psbt_hash: hash, params }), key) }, this.secret);
+        content: nip44.encrypt(JSON.stringify({ protocol: 'bitcoin-signer', version: 1, network: this.options.network ?? DEFAULT_NETWORK, id, method, expires: Math.floor(expires / 1000), psbt_hash: hash, params }), key) }, this.secret);
     } finally { key.fill(0); if (method === 'unlock') params.pin = ''; }
     const wire = JSON.stringify(['EVENT', event]);
     return new Promise<unknown>((resolve, reject) => {
@@ -155,7 +163,7 @@ export class SignerClient {
           try { socket.send(wire); } catch { socket.close(); }
         }
       };
-      const timer = setTimeout(() => this.settle(id, new Error('Request timed out. Check the device and transaction state before retrying; it may already have signed.')), Math.max(0, expires - this.now()));
+      const timer = setTimeout(() => this.settle(id, new Error('Request timed out. Check that Settings > Bitcoin network matches the device. Check the device and transaction state before retrying; it may already have signed.')), Math.max(0, expires - this.now()));
       const retry = setInterval(publish, 5000);
       this.pending.set(id, { method, hash, expires, wire, parent, sequence: 0, resolve, reject, timer, retry });
       this.emit({ deadline: expires }); publish();
@@ -169,6 +177,8 @@ export class SignerClient {
   }
   private acceptAccount(value: unknown) {
     const account = validateAccount(value);
+    const network = this.options.network ?? DEFAULT_NETWORK;
+    if (accountNetwork(account) !== network) throw new Error(networkMismatch(network, accountNetwork(account)));
     if (this.options.connection.xpub && this.options.connection.xpub !== account.xpub) throw new Error('Device account changed. Forget and pair again after checking the device.');
     this.options.connection.xpub = account.xpub; this.account = account;
     return account;

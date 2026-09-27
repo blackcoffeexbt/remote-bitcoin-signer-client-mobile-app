@@ -1,3 +1,5 @@
+import { DEFAULT_NETWORK } from './networks';
+import type { BitcoinNetwork } from './networks';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Alert, AppState } from 'react-native';
@@ -12,11 +14,12 @@ import type { ClientState, Connection } from './client';
 import type { PublicAccount } from './protocol';
 import { reviewPsbt } from './bitcoin';
 import type { Review } from './bitcoin';
-import { loadIdentity, loadConnection, saveConnection, forgetConnection } from './storage';
+import { loadNetwork, saveNetwork, loadIdentity, loadConnection, saveConnection, forgetConnection } from './storage';
 import { loadPayment, savePayment, clearPayment } from './wallet-storage';
 
 const initial: ClientState = { status: 'Connect a signing device in Settings.', connected: 0, pinRequired: false, deadline: 0 };
 function useClientState() {
+  const [network, setNetwork] = useState<BitcoinNetwork>(DEFAULT_NETWORK);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [account, setAccount] = useState<PublicAccount | null>(null);
   const [identity, setIdentity] = useState('');
@@ -44,7 +47,7 @@ function useClientState() {
     const secret = await loadIdentity();
     let pubkey: string;
     try { pubkey = getPublicKey(secret); } finally { secret.fill(0); }
-    return { pubkey, connection: await loadConnection() };
+    return { pubkey, connection: await loadConnection(), network: await loadNetwork() };
   };
   const stop = () => {
     epoch.current++; service.current?.close(); service.current = null;
@@ -53,7 +56,7 @@ function useClientState() {
   };
   useEffect(() => {
     let mounted = true;
-    init().then(value => { if (mounted) { setIdentity(value.pubkey); setConnection(value.connection); setReady(true); } }).catch(() => { if (mounted) setError('Could not load wallet settings. Unlock the phone or reset the connection.'); });
+    init().then(value => { if (mounted) { setNetwork(value.network); setIdentity(value.pubkey); setConnection(value.connection); setReady(true); } }).catch(() => { if (mounted) setError('Could not load wallet settings. Unlock the phone or reset the connection.'); });
     const timer = setInterval(() => setNow(Date.now()), 500);
     const sub = AppState.addEventListener('change', next => {
       setForeground(next === 'active');
@@ -88,19 +91,35 @@ function useClientState() {
     })() },
   ]);
   const run = async (work: (version: number) => Promise<void>) => {
-    if (working.current || chainBusy) return;
+    if (!ready || working.current || chainBusy) return;
     working.current = true; setBusy(true); setError('');
     const version = ++epoch.current;
     try { await work(version); }
     catch (e) { if (epoch.current === version) setError(e instanceof Error ? e.message : 'Request failed'); }
     finally { if (epoch.current === version) { working.current = false; setBusy(false); setPin(''); } }
   };
+  const changeNetwork = (next: BitcoinNetwork) => {
+    if (!ready || working.current || chainBusy || (account && recovery !== 'ready') || next === network) return;
+    // Persisted signed-payment journals stay intact; reconnect restores them.
+    service.current?.close(); service.current = null;
+    void run(async version => {
+      if (account && signed) {
+        const saved = await loadPayment(account);
+        if (!saved || saved.signed !== signed) throw new Error('Save or export this signed payment before changing Bitcoin network. Its recovery copy could not be verified.');
+      }
+      if (epoch.current !== version) return;
+      await saveNetwork(next);
+      if (epoch.current !== version) { setReady(false); setError('Network changed while away. Restart the app to reload settings.'); return; }
+      setAccount(null); setPsbt(''); setReview(null); setSigned(''); setPin(''); setCode('');
+      setRecovery('loading'); setNetwork(next); setState({ ...initial, status: 'Bitcoin network changed. Reconnect to your signing device.' });
+    });
+  };
   const client = async (config: Connection, version: number) => {
     service.current?.close();
     const secret = await loadIdentity();
     try {
       if (epoch.current !== version) throw new Error('Operation interrupted');
-      const value = new SignerClient({ secret, connection: { ...config }, onState: s => { if (epoch.current === version) setState(s); } });
+      const value = new SignerClient({ network, secret, connection: { ...config }, onState: s => { if (epoch.current === version) setState(s); } });
       service.current = value; return value;
     } finally { secret.fill(0); }
   };
@@ -154,7 +173,7 @@ function useClientState() {
     } catch (e) { setError((e as Error).message); }
   };
   const shareSigned = async () => {
-    const file = new File(Paths.cache, 'signed-testnet4.psbt');
+    const file = new File(Paths.cache, `signed-${network.toLowerCase()}.psbt`);
     try {
       if (!await Sharing.isAvailableAsync()) throw new Error('File sharing unavailable. Use Copy signed PSBT.');
       file.create({ overwrite: true }); file.write(Buffer.from(signed, 'base64'));
@@ -169,7 +188,7 @@ function useClientState() {
   };
   const forget = () => Alert.alert('Forget this device?', 'This removes this phone’s connection and pairing information. Remove this phone from Paired browsers on your signing device as well.', [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Forget', style: 'destructive', onPress: () => { stop(); void forgetConnection().then(() => { setAccount(null); setConnection(null); setReview(null); setSigned(''); setPsbt(''); return init().then(value => { setIdentity(value.pubkey); setConnection(value.connection); setReady(true); }); }).catch(() => setError('Could not clear wallet settings')); } },
+    { text: 'Forget', style: 'destructive', onPress: () => { stop(); void forgetConnection().then(() => { setAccount(null); setConnection(null); setReview(null); setSigned(''); setPsbt(''); return init().then(value => { setNetwork(value.network); setIdentity(value.pubkey); setConnection(value.connection); setReady(true); }); }).catch(() => setError('Could not clear wallet settings')); } },
   ]);
   const acceptCode = (data: string) => {
     if (!scanningRef.current) return;
@@ -178,7 +197,7 @@ function useClientState() {
   };
   const prepare = (value: string) => { if (account) { setPsbt(value); setReview(reviewPsbt(value, account)); setSigned(''); setError(''); } };
   const invalidate = () => { if (!signed) { setReview(null); setPsbt(''); } };
-  return { connection, account, identity, ready, busy, chainBusy, setChainBusy, recovery, state, error, setError,
+  return { network, changeNetwork, connection, account, identity, ready, busy, chainBusy, setChainBusy, recovery, state, error, setError,
     code, setCode, label, setLabel, psbt, setPsbt, review, signed, pin, setPin, scanning, now, foreground,
     stop, clearSaved, pair, reconnect, inspect, sign, unlock, importFile, shareSigned, scan, forget, acceptCode,
     closeScanner: () => { scanningRef.current = false; setScanning(false); }, prepare, invalidate };

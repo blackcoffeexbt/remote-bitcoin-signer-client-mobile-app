@@ -1,7 +1,9 @@
+import { DEFAULT_NETWORK, NETWORKS } from './networks.ts';
+import type { BitcoinNetwork } from './networks.ts';
 import { Buffer } from 'buffer';
 import { sha256 } from '@noble/hashes/sha2.js';
 
-export const DEFAULT_ELECTRS_SERVER = 'ssl://mempool.space:40002';
+export const DEFAULT_ELECTRS_SERVER = NETWORKS[DEFAULT_NETWORK].server;
 
 // Bitcoin Core's Testnet4 genesis. Addresses alone cannot distinguish test networks.
 export const TESTNET4_GENESIS = '00000000da84f2bafbbc53dee25a72ae507ff4914b867c565be350b0da8bf043';
@@ -28,7 +30,8 @@ export class ElectrumClient implements Rpc {
   private verified = false;
   private connectingReject?: (error: Error) => void;
   private timeoutMs: number;
-  constructor(timeoutMs = 15000) { this.timeoutMs = timeoutMs; }
+  readonly network: BitcoinNetwork;
+  constructor(timeoutMs = 15000, network: BitcoinNetwork = DEFAULT_NETWORK) { this.timeoutMs = timeoutMs; this.network = network; }
   async connect(address: string, dial: Dial) {
     if (this.wire || this.closed) throw new Error('Create a new server connection');
     const endpoint = parseEndpoint(address);
@@ -46,12 +49,12 @@ export class ElectrumClient implements Rpc {
       if (!Array.isArray(version) || typeof version[1] !== 'string' || !/^1\.4(?:\.|$)/.test(version[1])) throw new Error('Electrs must support Electrum protocol 1.4');
       const header = await this.call('blockchain.block.header', [0]);
       if (typeof header !== 'string' || !/^[0-9a-fA-F]{160}$/.test(header) ||
-        Buffer.from(sha256(sha256(Buffer.from(header, 'hex')))).reverse().toString('hex') !== TESTNET4_GENESIS) throw new Error('Server is not on Bitcoin Testnet4');
+        Buffer.from(sha256(sha256(Buffer.from(header, 'hex')))).reverse().toString('hex') !== NETWORKS[this.network].genesis) throw new Error(`Server is not on Bitcoin ${this.network}`);
       this.verified = true;
     } catch (e) { this.close(); throw e; }
   }
   request(method: string, params: unknown[] = []) {
-    if (!this.verified) return Promise.reject(new Error('Connect to a verified Testnet4 server first'));
+    if (!this.verified) return Promise.reject(new Error(`Connect to a verified ${this.network} server first`));
     return this.call(method, params);
   }
   private call(method: string, params: unknown[]) {

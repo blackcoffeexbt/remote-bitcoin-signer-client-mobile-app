@@ -1,3 +1,4 @@
+import { NETWORKS } from './networks';
 import { useState } from 'react';
 import appConfig from '../app.json';
 import { Alert, Pressable, Share, Switch, Text, View } from 'react-native';
@@ -12,7 +13,6 @@ import { Button, Empty, Field, Icon, Notice, Row, Screen, useUI } from './ui';
 import { approvalStatus, formatBtc, formatSats, shorten } from './presentation';
 import { ArgusLogo } from './ArgusLogo';
 import { ArgusBrand } from './ArgusBrand';
-import { DEFAULT_ELECTRS_SERVER } from './electrum';
 import { outpoint } from './wallet';
 import type { HistoryEntry } from './wallet';
 
@@ -48,7 +48,7 @@ export function HomeScreen() {
   const { colors, styles } = useUI();
   const c = useClient(), w = useWallet();
   const total = w.snapshot?.coins.reduce((n, coin) => n + coin.value, 0n);
-  return <Screen tab><View style={styles.between}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><ArgusLogo size={38} /><Text style={styles.title}>Argus</Text></View><View style={styles.pill}><Text style={styles.network}>Testnet4</Text></View></View>
+  return <Screen tab><View style={styles.between}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><ArgusLogo size={38} /><Text style={styles.title}>Argus</Text></View><View style={styles.pill}><Text style={styles.network}>{c.network}</Text></View></View>
     {!c.account ? <WalletAccess /> : <>
       <View style={styles.balance}><View style={styles.iconCircle}><Icon name="bitcoin" color={colors.accent} /></View><Text style={styles.muted}>Total balance</Text><Text adjustsFontSizeToFit numberOfLines={1} style={styles.amount}>{total === undefined ? '—' : formatBtc(total)}</Text><Text style={styles.muted}>BTC{total === undefined ? '' : `  ·  ${formatSats(total)} sats`}</Text>
         <Text style={styles.muted}>{w.snapshot ? `Updated ${new Date(w.snapshot.syncedAt).toLocaleTimeString()}` : 'Refresh to see your balance'}</Text>
@@ -80,12 +80,12 @@ export function SettingsScreen() {
   const c = useClient(), w = useWallet();
   return <Screen tab title="Settings"><View style={[styles.card, { alignItems: 'center' }]}><ArgusBrand compact /><Text style={styles.muted}>Remote access. Secret secured.</Text><Text style={styles.muted}>Bitcoin keys stay on your signing device.</Text><Text style={styles.muted}>Version {appConfig.expo.version} · Build {appConfig.expo.android.versionCode}</Text></View><View style={styles.card}>
     <Row icon="device" title="Signing device" detail={c.connection ? 'Paired device' : 'Add a device'} onPress={() => router.push('/signer')} />
-    <View style={styles.divider} /><Row icon="settings" title="Node settings" detail={w.savedServer === DEFAULT_ELECTRS_SERVER ? 'Electrs · mempool.space (default)' : w.savedServer ? 'Electrs · Custom server' : 'Electrs · Not configured'} onPress={() => router.push('/server')} />
+    <View style={styles.divider} /><Row icon="settings" title="Node settings" detail={w.savedServer === NETWORKS[c.network].server ? 'Electrs · mempool.space (default)' : w.savedServer ? 'Electrs · Custom server' : 'Electrs · Not configured'} onPress={() => router.push('/server')} />
     <View style={styles.divider} /><Row icon="coins" title="Advanced settings" detail="Address gap limit, wallet details and transaction tools" onPress={() => router.push('/advanced')} />
   </View><View style={styles.card}><Text style={styles.heading}>Appearance</Text>
     {(['light', 'dark', 'system'] as const).map(mode => <Pressable key={mode} accessibilityRole="radio" accessibilityLabel={mode === 'system' ? 'Use system appearance' : `${mode === 'light' ? 'Light' : 'Dark'} mode`} accessibilityState={{ selected: preference === mode, disabled: !ready || saving }} disabled={!ready || saving} onPress={() => void setPreference(mode)} style={styles.row}><View style={styles.flex}><Text style={styles.text}>{mode === 'system' ? 'Use system setting' : mode === 'light' ? 'Light' : 'Dark'}</Text></View>{preference === mode && <Icon name="check" color={colors.accent} />}</Pressable>)}
     <Notice error={error} />
-  </View><View style={styles.card}><View style={styles.between}><Text style={styles.text}>Bitcoin network</Text><View style={styles.pill}><Text style={styles.network}>Testnet4</Text></View></View><Text style={styles.muted}>Use Testnet4 coins with this wallet.</Text></View></Screen>;
+  </View><View style={styles.card}><View style={styles.between}><Text style={styles.text}>Bitcoin network</Text><View style={styles.pill}><Text style={styles.network}>{c.network}</Text></View></View>{(['Mainnet', 'Testnet4'] as const).map(network => <Pressable key={network} accessibilityRole="radio" accessibilityState={{ selected: c.network === network, disabled: !c.ready || c.busy || c.chainBusy || (!!c.account && c.recovery !== 'ready') }} disabled={!c.ready || c.busy || c.chainBusy || (!!c.account && c.recovery !== 'ready')} onPress={() => c.changeNetwork(network)} style={styles.row}><View style={styles.flex}><Text style={styles.text}>{network}</Text><Text style={styles.muted}>{network === 'Mainnet' ? 'Real Bitcoin' : 'Test coins only'}</Text></View>{c.network === network && <Icon name="check" color={colors.accent} />}</Pressable>)}<Text style={styles.muted}>Must match your signing device. Changing networks disconnects the device; saved payments are kept.</Text><Notice error={c.error} /></View></Screen>;
 }
 export function SignerScreen() {
   const { styles } = useUI();
@@ -107,8 +107,8 @@ export function SignerScreen() {
 }
 export function ServerScreen() {
   const { styles } = useUI();
-  const w = useWallet();
-  return <Screen title="Node settings" subtitle="Electrs settings for your Testnet4 wallet."><Field label="Electrs server address" editable={!w.lock && w.settingsReady} value={w.server} onChangeText={value => { w.setServer(value); w.invalidate(); }} autoCorrect={false} autoCapitalize="none" maxLength={240} placeholder={DEFAULT_ELECTRS_SERVER} />
+  const w = useWallet(), c = useClient();
+  return <Screen title="Node settings" subtitle={`Electrs settings for your ${c.network} wallet.`}><Field label="Electrs server address" editable={!w.lock && w.settingsReady} value={w.server} onChangeText={value => { w.setServer(value); w.invalidate(); }} autoCorrect={false} autoCapitalize="none" maxLength={240} placeholder={NETWORKS[c.network].server} />
     <Text style={styles.muted}>Use ssl://host:port for an encrypted connection, or tcp://host:port for a local server.</Text>
     {w.server.startsWith('tcp:') && <Text style={styles.muted}>This connection is not encrypted. Use it only on a trusted network.</Text>}
     <Button title="Save node settings" disabled={w.lock || !w.settingsReady || !w.server} onPress={() => void w.saveSettings().then(ok => { if (ok) Alert.alert('Saved', 'Your Electrs node settings have been updated.'); })} />
@@ -119,7 +119,7 @@ function NeedBalance() { const w = useWallet(); return <Empty title="Update your
 export function ReceiveScreen() {
   const { styles } = useUI();
   const c = useClient(), w = useWallet();
-  return <Screen title="Receive Bitcoin" subtitle="Only send Testnet4 coins to this address.">
+  return <Screen title="Receive Bitcoin" subtitle={`Only send ${c.network} coins to this address.`}>
     {!c.account ? <WalletAccess /> : !w.snapshot ? <NeedBalance /> : <>
       {w.receive ? <><View style={{ backgroundColor: '#fff', padding: 24, borderRadius: 24, alignItems: 'center', alignSelf: 'center' }}><QRCode value={w.receive} size={224} backgroundColor="#fff" color="#101216" /></View><View style={styles.card}><Text selectable style={[styles.mono, styles.center]}>{w.receive}</Text><Button title="Copy address" icon="copy" onPress={() => void Clipboard.setStringAsync(w.receive).then(() => Alert.alert('Copied', 'Address copied.')).catch(() => Alert.alert('Copy failed', 'Please try again.'))} /><Button title="Share address" secondary onPress={() => void Share.share({ message: w.receive }).catch(() => Alert.alert('Sharing failed', 'Please try again.'))} /></View></> : <Empty icon="receive" title="Your receiving address" description="Create an address and share it to receive Bitcoin." />}
       <Button title={w.receive ? 'Get a new address' : 'Create receive address'} secondary={!!w.receive} disabled={w.lock} onPress={() => void w.freshAddress()} /><Notice error={w.error} />
@@ -163,7 +163,7 @@ export function CoinsScreen() {
 export function ReviewScreen() {
   const { styles } = useUI();
   const c = useClient();
-  return <Screen title={c.signed ? 'Payment details' : 'Review payment'} subtitle="Testnet4">
+  return <Screen title={c.signed ? 'Payment details' : 'Review payment'} subtitle={c.network}>
     {c.review ? <>
       <View style={styles.card}>{c.review.outputs.map((output, index) => <View key={index} style={index ? styles.output : { gap: 8 }}><View style={styles.between}><Text style={styles.muted}>{output.change ? 'Your wallet' : 'Recipient'}</Text><Text style={styles.heading}>{formatSats(output.sats)} sats</Text></View><Text selectable style={styles.mono}>{output.address}</Text></View>)}<View style={styles.divider} /><View style={styles.between}><Text style={styles.muted}>Network fee</Text><Text style={styles.text}>{formatSats(c.review.fee)} sats</Text></View><View style={styles.between}><Text style={styles.text}>Total leaving wallet</Text><Text style={styles.heading}>{formatSats(c.review.debit)} sats</Text></View></View>
       {c.busy && <View style={styles.card}><Text accessibilityLiveRegion="polite" style={styles.heading}>{approvalStatus(c.state.status, c.state.pinRequired)}</Text>{c.state.deadline > 0 && <Text style={styles.muted}>{Math.max(0, Math.ceil((c.state.deadline - c.now) / 1000))} seconds remaining</Text>}

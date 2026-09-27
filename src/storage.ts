@@ -1,3 +1,5 @@
+import { DEFAULT_NETWORK, isNetwork } from './networks';
+import type { BitcoinNetwork } from './networks';
 import * as SecureStore from 'expo-secure-store';
 import { generateSecretKey } from 'nostr-tools/pure';
 import { Buffer } from 'buffer';
@@ -31,4 +33,15 @@ export async function saveConnection(value: Connection) {
 export async function forgetConnection() {
   await SecureStore.deleteItemAsync(connectionName);
   await SecureStore.deleteItemAsync(keyName);
+}
+
+export async function loadNetwork(): Promise<BitcoinNetwork> {
+  const value = await SecureStore.getItemAsync('wallet.network.v1');
+  if (value === null) return DEFAULT_NETWORK;
+  if (!isNetwork(value)) throw new Error('Invalid saved Bitcoin network');
+  return value;
+}
+export async function saveNetwork(network: BitcoinNetwork) {
+  if (!isNetwork(network)) throw new Error('Unsupported Bitcoin network');
+  await SecureStore.setItemAsync('wallet.network.v1', network, options);
 }

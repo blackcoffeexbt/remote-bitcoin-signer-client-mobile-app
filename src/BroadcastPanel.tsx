@@ -1,3 +1,4 @@
+import { accountNetwork } from './networks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Text, View } from 'react-native';
 import type { PublicAccount } from './protocol';
@@ -10,6 +11,7 @@ import { Button, Notice, Row, useUI } from './ui';
 
 export function BroadcastPanel({ account, original, signed, disabled, onBusyChange }: { account: PublicAccount; original: string; signed: string; disabled: boolean; onBusyChange(value: boolean): void }) {
   const { styles } = useUI();
+  const network = accountNetwork(account);
   const final = useMemo(() => finalizePayment(original, signed, account), [original, signed, account]);
   const [status, setStatus] = useState('Approved by your device. Ready to send.'), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false), working = useRef(false), alive = useRef(true), rpc = useRef<ElectrumClient | null>(null);
@@ -36,9 +38,9 @@ export function BroadcastPanel({ account, original, signed, disabled, onBusyChan
     const active = () => alive.current && version === generation.current;
     working.current = true; setBusy(true); onBusyChange(true); setError('');
     try {
-      const server = await loadServer(); if (!active()) return;
+      const server = await loadServer(network); if (!active()) return;
       if (!server) throw new Error('Set your Electrs server address in app settings first');
-      const c = new ElectrumClient(); rpc.current = c; await c.connect(server, dialElectrum);
+      const c = new ElectrumClient(15000, network); rpc.current = c; await c.connect(server, dialElectrum);
       const known = await transactionKnown(c, final.txid);
       if (!active()) return;
       const record: SavedPayment = { original, signed, createdAt: Date.now(), state: known ? 'submitted' : 'ready' };
@@ -59,7 +61,7 @@ export function BroadcastPanel({ account, original, signed, disabled, onBusyChan
     } catch (e) { if (active()) { setError((e as Error).message); if (broadcast) setStatus('We couldn’t confirm whether your payment was sent. Check its status before trying again.'); } }
     finally { if (active()) { rpc.current?.close(); rpc.current = null; working.current = false; setBusy(false); onBusyChange(false); } }
   };
-  const confirm = () => Alert.alert('Send this payment?', `Fee: ${final.fee} sats (${final.feeRate.toFixed(3)} sat/vB).\nTotal leaving wallet: ${final.review.debit} sats.\n\n${final.review.outputs.map(o => `${o.change ? 'Your wallet' : 'Recipient'}: ${o.sats} sats\n${o.address}`).join('\n\n')}\n\nThis sends your payment to the Testnet4 network.`, [
+  const confirm = () => Alert.alert('Send this payment?', `Fee: ${final.fee} sats (${final.feeRate.toFixed(3)} sat/vB).\nTotal leaving wallet: ${final.review.debit} sats.\n\n${final.review.outputs.map(o => `${o.change ? 'Your wallet' : 'Recipient'}: ${o.sats} sats\n${o.address}`).join('\n\n')}\n\nThis sends your payment to the ${network} network.`, [
     { text: 'Cancel', style: 'cancel' }, { text: 'Send payment', onPress: () => void run(true) },
   ]);
   return <View style={styles.card}><Text style={styles.heading}>{submitted ? 'Payment sent' : 'Ready to send'}</Text>
