@@ -10,7 +10,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lnbits.remotebitcoinsigner",
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Connect to your Electrs server on your local network to sync and broadcast Testnet4 payments."
+        "NSLocalNetworkUsageDescription": "Connect to your Bitcoin node on your local network to sync and broadcast transactions."
       }
     },
     "android": {

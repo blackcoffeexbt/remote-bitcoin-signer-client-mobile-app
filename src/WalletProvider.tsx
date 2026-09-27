@@ -26,7 +26,8 @@ function useWalletState({ network, account, disabled, paymentPending, autoRefres
   const [destination, setDestination] = useState(''), [amount, setAmount] = useState(''), [maximum, setMaximum] = useState(false);
   const [feeTarget, setFeeTarget] = useState('hourFee');
   const [rate, setRate] = useState(''), [fees, setFees] = useState<Fees | null>(null), [estimated, setEstimated] = useState(false);
-  const [manual, setManual] = useState(false), [selected, setSelected] = useState<string[]>([]), [unconfirmed, setUnconfirmed] = useState(false);
+  const [manual, setManual] = useState(false), [selected, setSelected] = useState<string[]>([]), [unconfirmed, setUnconfirmed] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false), working = useRef(false), alive = useRef(true), rpc = useRef<ElectrumClient | null>(null);
   const generation = useRef(0);
   const cacheReady = settingsReady && (!account || (cacheFor?.account === account && cacheFor.server === savedServer));
@@ -37,7 +38,7 @@ function useWalletState({ network, account, disabled, paymentPending, autoRefres
     alive.current = true;
     void Promise.all([loadServer(network), loadGapLimit()]).then(([value, gap]) => { if (mounted) { setServer(value); setSavedServer(value); setGapLimit(gap); setGapInput(String(gap)); setSettingsReady(true); } }).catch(() => { if (mounted) setError('Could not load wallet preferences'); });
     const subscription = AppState.addEventListener('change', state => {
-      if (state !== 'active') { alive.current = false; lifecycleGeneration.current++; rpc.current?.close(); rpc.current = null; working.current = false; setBusy(false); onBusyChange(false); }
+      if (state !== 'active') { alive.current = false; lifecycleGeneration.current++; rpc.current?.close(); rpc.current = null; working.current = false; setBusy(false); setRefreshing(false); onBusyChange(false); }
       else { alive.current = true; setLoadEpoch(value => value + 1); }
     });
     return () => { mounted = false; alive.current = false; lifecycleGeneration.current++; rpc.current?.close(); subscription.remove(); if (working.current) onBusyChange(false); };
@@ -60,7 +61,7 @@ function useWalletState({ network, account, disabled, paymentPending, autoRefres
     const active = () => alive.current && version === generation.current;
     working.current = true; setBusy(true); onBusyChange(true); setError('');
     try { await work(active); return active(); } catch (e) { if (active()) setError((e as Error).message); }
-    finally { if (version === generation.current) { rpc.current?.close(); rpc.current = null; working.current = false; setBusy(false); onBusyChange(false); } }
+    finally { if (version === generation.current) { rpc.current?.close(); rpc.current = null; working.current = false; setBusy(false); setRefreshing(false); onBusyChange(false); } }
   };
   const connect = async (active: () => boolean) => {
     if (!savedServer || server.trim() !== savedServer) throw new Error('Save your Electrs server address first');
@@ -77,6 +78,7 @@ function useWalletState({ network, account, disabled, paymentPending, autoRefres
     if (!rate || estimated) { setRate(String(result.hourFee)); setFeeTarget('hourFee'); setEstimated(true); invalidate(); }
   });
   const sync = (automatic = false) => account && cacheReady && run(async active => {
+    setRefreshing(true);
     if (!automatic) invalidate();
     setSnapshot(null); setSelected([]); setHistoryError('');
     const c = await connect(active), cursor = await loadCursor(account);
@@ -142,7 +144,7 @@ function useWalletState({ network, account, disabled, paymentPending, autoRefres
   const history = snapshot ?? (stored?.cache.server === savedServer ? { history: stored.history, height: stored.cache.height, syncedAt: stored.cache.syncedAt } : null);
   return { server, setServer, savedServer, gapLimit, gapInput, setGapInput, saveGapSettings, settingsReady, status, error, setError, snapshot, history, historyCached: !snapshot && !!history, historyError, receive, destination, setDestination,
     feeTarget, setFeeTarget, amount, setAmount, maximum, setMaximum, rate, setRate, fees, estimated, setEstimated, manual, setManual, selected, setSelected,
-    unconfirmed, setUnconfirmed, busy, lock, invalidate, updateFees, sync, freshAddress, prepare, plan, planError, saveSettings };
+    unconfirmed, setUnconfirmed, refreshing, busy, lock, invalidate, updateFees, sync, freshAddress, prepare, plan, planError, saveSettings };
 }
 const Context = createContext<ReturnType<typeof useWalletState> | null>(null);
 function Session({ children }: { children: ReactNode }) {

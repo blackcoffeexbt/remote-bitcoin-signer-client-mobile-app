@@ -75,7 +75,7 @@ a firmware network change requires deliberate pairing with its new xpub.
    `tcp://192.168.1.10:50001` for a trusted local network. Plain TCP exposes
    queries to the network. This field is not an Esplora HTTP API URL. Standard
    Electrs can sit behind a TLS proxy; accept-any-certificate mode is not offered.
-3. **Connect wallet**, then **Refresh balance**. The phone verifies
+3. **Connect wallet**, then tap the circular **Refresh balance** icon on Home. The phone verifies
    the selected network's genesis, scans receive/change branches, and displays balances,
    coins and transaction history. Electrs sees script hashes and supplies chain
    status; this is a server-trusting wallet, not SPV or a full node.
@@ -84,7 +84,8 @@ a firmware network change requires deliberate pairing with its new xpub.
    a 20-address gap and a 1,000-address limit per branch; incomplete scans fail.
 5. Enter a recipient and amount in sats, or choose **Send maximum**. Use
    automatic largest-first selection or **Coin control** to select exact outputs.
-   Unconfirmed inputs require an explicit opt-in; immature coinbase is excluded.
+   Unconfirmed inputs are available by default; Coin control can exclude them.
+   Immature coinbase is excluded.
 6. **Get fee estimates** uses only mempool.space's selected-network recommended-fee
    endpoint. Choose a target or enter sat/vB manually (up to three decimals).
    Stale estimates require refresh after five minutes. API failures are shown;
@@ -212,7 +213,7 @@ They do not establish native socket interoperability or physical-device behavior
   untrusted certificates and non-Testnet4 servers. Exercise local-network prompts.
 - Receive test coins on a fresh address; restart and ensure indices survive.
 - Sync both branches, pending transactions and change; simulate backend failures.
-- Select exact UTXOs, exclude immature coinbase, opt into unconfirmed inputs,
+- Select exact UTXOs, exclude immature coinbase, spend unconfirmed inputs and test the Coin control opt-out,
   test max-send/insufficient funds/dust, and compare displayed versus final fees.
 - Fetch fees, test API failure and five-minute staleness, and use a manual rate.
 - Build/sign/reject on ESP32; test wrong PIN, cooldown, timeout and backgrounding.
@@ -242,7 +243,7 @@ during the integration check; the app reports this and supports a manual fee rat
 - Wallet opens with balance, Send/Receive and recent activity. Pairing and
   server forms appear only under Settings. PSBT tools are under Advanced settings.
 - Back/tab navigation preserves recipient, amount, selected coins, fee, receive
-  address and the prepared payment. A pending payment reopens from Wallet/Activity.
+  address and the prepared payment. A pending payment reopens from Activity.
 - Receive QR matches the full copy/share address. Long addresses, large amounts,
   accessibility text sizes and the PIN keyboard must remain usable.
 - Device PIN is shown only for an authenticated request. Send confirmation remains
@@ -387,3 +388,16 @@ Physical ESP32/Android/iOS pairing, Settings switching/restart recovery and
 end-to-end signing remain unverified for this change. Exercise payment tests
 with disposable Testnet4 funds; no hardware was flashed or transaction broadcast
 as part of this source change.
+
+## Wallet refresh and unconfirmed spending
+
+Home shows “Updating…” while refreshing the balance. The circular-arrow button
+beside Total balance rotates during sync. Unconfirmed outputs are eligible by
+default for automatic selection, manual coin control and send-max; Coin control
+can disable them. Immature coinbase and spent-input checks remain in place.
+The Home payment card and both Settings taglines have been removed. Pending
+and signed-payment recovery remains accessible from Activity.
+
+Verification: clean dependency installation, 61 tests, typecheck, lint and
+Android/iOS JavaScript exports passed. No native APK build, physical phone/ESP32
+test or transaction broadcast was performed for this source update.

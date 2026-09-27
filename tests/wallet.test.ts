@@ -211,11 +211,36 @@ test('send max deducts exact estimated fee, and dust change is included in the r
   assert.throws(() => planPayment([f.coin], null, f.destination, '100000', '1'), /Insufficient/);
   assert.throws(() => planPayment([f.coin], null, f.destination, '293', '1'), /dust/);
 });
-test('excludes immature coinbase and unconfirmed inputs unless explicitly eligible', () => {
+test('allows unconfirmed inputs by default while excluding immature coinbase and respecting opt-out', () => {
   const f = setup();
   assert.throws(() => planPayment([{ ...f.coin, confirmations: 99 }], null, f.destination, '1000', '1'));
-  assert.throws(() => planPayment([{ ...f.coin, coinbase: false, confirmations: 0 }], null, f.destination, '1000', '1'));
+  assert.throws(() => planPayment([{ ...f.coin, coinbase: false, confirmations: 0 }], null, f.destination, '1000', '1', false));
+  const pending = { ...f.coin, coinbase: false, confirmations: 0 };
+  assert.ok(planPayment([pending], null, f.destination, '1000', '1'));
+  assert.ok(planPayment([pending], [outpoint(pending)], f.destination, 'max', '1'));
+  assert.throws(() => planPayment([pending], [outpoint(pending)], f.destination, 'max', '1', false));
   assert.ok(planPayment([{ ...f.coin, coinbase: false, confirmations: 0 }], null, f.destination, '1000', '1', true));
+});
+test('unconfirmed parent outputs pass preparation, signing validation and pre-broadcast checks', async () => {
+  const f = setup(), parent = new Transaction();
+  parent.addInput(Buffer.from(f.coin.txid, 'hex').reverse(), 0);
+  parent.addOutput(Buffer.from(f.a.script, 'hex'), 90000n);
+  for (const height of [0, -1]) {
+    const row = { tx_hash: parent.getId(), tx_pos: 0, value: 90000, height };
+    const coin = verifyCoin(f.a, row, parent.toHex(), 150);
+    assert.equal(coin.coinbase, false); assert.equal(coin.confirmations, 0);
+    const rpc: Rpc = { request: (method, params) => method.endsWith('listunspent') ? Promise.resolve([row]) : f.rpc.request(method, params) };
+    const plan = planPayment([coin], null, f.destination, '1000', '1');
+    await checkUnspent(rpc, plan.coins);
+    const change = deriveAddress(f.account, 1, 0);
+    const original = buildPsbt(f.account, plan, change, [f.a, change]);
+    const signed = Psbt.fromBase64(original, { network: networks.testnet }).signAllInputs(f.signer).toBase64();
+    assert.ok(finalizePayment(original, signed, f.account).txid);
+    await checkPsbtUnspent(rpc, original, f.account);
+    const spent: Rpc = { request: (method, params) => method.endsWith('listunspent') ? Promise.resolve([]) : rpc.request(method, params) };
+    await assert.rejects(checkUnspent(spent, plan.coins), /spent/);
+    await assert.rejects(checkPsbtUnspent(spent, original, f.account), /spent/);
+  }
 });
 test('integer satoshi math rejects precision loss and wrong-network / unsupported recipients', () => {
   assert.equal(sats('2100000000000000'), 2100000000000000n);

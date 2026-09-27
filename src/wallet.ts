@@ -185,7 +185,7 @@ export function estimatedVsize(inputs: number, scripts: Uint8Array[]) {
   return Math.ceil((base * 4 + 2 + 109 * inputs) / 4);
 }
 export type Plan = { coins: Coin[]; destination: string; amount: bigint; fee: bigint; change: bigint; vsize: number; rate: string };
-export function planPayment(available: Coin[], selected: string[] | null, destination: string, amountText: string, rateText: string, allowUnconfirmed = false, network: BitcoinNetwork = DEFAULT_NETWORK): Plan {
+export function planPayment(available: Coin[], selected: string[] | null, destination: string, amountText: string, rateText: string, allowUnconfirmed = true, network: BitcoinNetwork = DEFAULT_NETWORK): Plan {
   const output = recipientScript(destination, network), rate = feeRate(rateText);
   const eligible = available.filter(c => (!c.coinbase || c.confirmations >= 100) && (allowUnconfirmed || c.confirmations > 0));
   const keys = new Set(selected ?? []);

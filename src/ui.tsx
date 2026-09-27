@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Easing, ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ColorValue, TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
@@ -32,6 +32,21 @@ export function Button({ title, onPress, disabled = false, secondary = false, ic
     <Text style={[styles.buttonText, secondary && styles.white]}>{title}</Text>
   </Pressable>;
 }
+export function RefreshButton({ refreshing, disabled, onPress }: { refreshing: boolean; disabled: boolean; onPress: () => void }) {
+  const { colors, styles } = useUI();
+  const [rotation] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    if (!refreshing) { rotation.setValue(0); return; }
+    const animation = Animated.loop(Animated.timing(rotation, {
+      toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true, isInteraction: false,
+    }));
+    animation.start();
+    return () => { animation.stop(); rotation.setValue(0); };
+  }, [refreshing, rotation]);
+  return <Pressable accessibilityRole="button" accessibilityLabel={refreshing ? 'Updating balance' : 'Refresh balance'} accessibilityState={{ disabled: disabled || refreshing, busy: refreshing }} disabled={disabled || refreshing} onPress={onPress} style={({ pressed }) => [styles.refreshButton, (pressed || (disabled && !refreshing)) && styles.dim]}>
+    <Animated.View style={{ transform: [{ rotate: rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }}><Icon name="refresh" color={colors.accent} /></Animated.View>
+  </Pressable>;
+}
 export function Screen({ children, title, subtitle, tab = false }: { children: ReactNode; title?: string; subtitle?: string; tab?: boolean }) {
   const { styles } = useUI();
   return <SafeAreaView style={styles.safe} edges={tab ? ['top', 'left', 'right'] : ['left', 'right', 'bottom']}><KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
@@ -58,6 +73,7 @@ function createStyles(colors: Palette) { return StyleSheet.create({
   mono: { color: colors.text, fontSize: 13, lineHeight: 22, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }, card: { padding: 20, borderRadius: 20, backgroundColor: colors.card, gap: 16 },
   input: { color: colors.text, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line, padding: 16, borderRadius: 12, fontSize: 16, minHeight: 56 },
   button: { padding: 16, minHeight: 54, backgroundColor: colors.accent, borderRadius: 14, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  refreshButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.raised, alignItems: 'center', justifyContent: 'center' },
   secondary: { backgroundColor: colors.raised }, buttonText: { color: colors.onAccent, fontSize: 16, fontWeight: '700', textAlign: 'center' }, white: { color: colors.text }, dim: { opacity: 0.45 },
   error: { color: colors.error, fontSize: 14, lineHeight: 22 }, notice: { padding: 16, borderRadius: 14, backgroundColor: colors.errorSurface }, output: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 16, gap: 8 },
   row: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12 }, iconCircle: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.raised, alignItems: 'center', justifyContent: 'center' },

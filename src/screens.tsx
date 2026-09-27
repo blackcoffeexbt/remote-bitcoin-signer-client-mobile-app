@@ -9,7 +9,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { useClient } from './ClientProvider';
 import { useWallet } from './WalletProvider';
 import { BroadcastPanel } from './BroadcastPanel';
-import { Button, Empty, Field, Icon, Notice, Row, Screen, useUI } from './ui';
+import { Button, Empty, Field, Icon, Notice, RefreshButton, Row, Screen, useUI } from './ui';
 import { approvalStatus, formatBtc, formatSats, shorten } from './presentation';
 import { ArgusLogo } from './ArgusLogo';
 import { ArgusBrand } from './ArgusBrand';
@@ -50,12 +50,11 @@ export function HomeScreen() {
   const total = w.snapshot?.coins.reduce((n, coin) => n + coin.value, 0n);
   return <Screen tab><View style={styles.between}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><ArgusLogo size={38} /><Text style={styles.title}>Argus</Text></View><View style={styles.pill}><Text style={styles.network}>{c.network}</Text></View></View>
     {!c.account ? <WalletAccess /> : <>
-      <View style={styles.balance}><View style={styles.iconCircle}><Icon name="bitcoin" color={colors.accent} /></View><Text style={styles.muted}>Total balance</Text><Text adjustsFontSizeToFit numberOfLines={1} style={styles.amount}>{total === undefined ? '—' : formatBtc(total)}</Text><Text style={styles.muted}>BTC{total === undefined ? '' : `  ·  ${formatSats(total)} sats`}</Text>
-        <Text style={styles.muted}>{w.snapshot ? `Updated ${new Date(w.snapshot.syncedAt).toLocaleTimeString()}` : 'Refresh to see your balance'}</Text>
+      <View style={styles.balance}><View style={styles.iconCircle}><Icon name="bitcoin" color={colors.accent} /></View><View style={styles.between}><Text style={styles.muted}>Total balance</Text>{!!w.savedServer && <RefreshButton refreshing={w.refreshing} disabled={w.lock} onPress={() => void w.sync()} />}</View><Text adjustsFontSizeToFit numberOfLines={1} style={styles.amount}>{w.refreshing ? 'Updating…' : total === undefined ? '—' : formatBtc(total)}</Text><Text style={styles.muted}>BTC{total === undefined ? '' : `  ·  ${formatSats(total)} sats`}</Text>
+        <Text accessibilityLiveRegion="polite" style={styles.muted}>{w.refreshing ? 'Updating balance…' : w.snapshot ? `Updated ${new Date(w.snapshot.syncedAt).toLocaleTimeString()}` : 'Refresh to see your balance'}</Text>
       </View>
       <View style={styles.actions}><View style={styles.flex}><Button title="Receive" icon="receive" secondary disabled={c.busy || c.chainBusy} onPress={() => router.push('/receive')} /></View><View style={styles.flex}><Button title="Send" icon="send" disabled={c.busy || c.chainBusy || !!c.signed} onPress={() => router.push('/send')} /></View></View>
-      <PendingPayment />
-      {!w.savedServer ? <View style={styles.card}><Row title="Node settings" detail="Configure your Electrs server to see your balance." icon="settings" onPress={() => router.push('/server')} /></View> : <Button title={w.busy ? 'Updating wallet…' : 'Refresh balance'} secondary icon="refresh" disabled={w.lock} onPress={() => void w.sync()} />}
+      {!w.savedServer ? <View style={styles.card}><Row title="Node settings" detail="Configure your Electrs server to see your balance." icon="settings" onPress={() => router.push('/server')} /></View> : null}
       <Notice error={w.error || c.error} />
       <View style={styles.between}><Text style={styles.heading}>Recent activity</Text><Pressable accessibilityRole="button" onPress={() => router.push('/activity')}><Text style={{ color: colors.accent }}>View all</Text></Pressable></View>
       {w.historyCached && <Text style={styles.muted}>Saved activity · Updated {new Date(w.history!.syncedAt).toLocaleString()}</Text>}
@@ -78,7 +77,7 @@ export function ActivityScreen() {
 export function SettingsScreen() {
   const { colors, styles, preference, setPreference, ready, saving, error } = useUI();
   const c = useClient(), w = useWallet();
-  return <Screen tab title="Settings"><View style={[styles.card, { alignItems: 'center' }]}><ArgusBrand compact /><Text style={styles.muted}>Remote access. Secret secured.</Text><Text style={styles.muted}>Bitcoin keys stay on your signing device.</Text><Text style={styles.muted}>Version {appConfig.expo.version} · Build {appConfig.expo.android.versionCode}</Text></View><View style={styles.card}>
+  return <Screen tab title="Settings"><View style={[styles.card, { alignItems: 'center' }]}><ArgusBrand compact /><Text style={styles.muted}>Version {appConfig.expo.version} · Build {appConfig.expo.android.versionCode}</Text></View><View style={styles.card}>
     <Row icon="device" title="Signing device" detail={c.connection ? 'Paired device' : 'Add a device'} onPress={() => router.push('/signer')} />
     <View style={styles.divider} /><Row icon="settings" title="Node settings" detail={w.savedServer === NETWORKS[c.network].server ? 'Electrs · mempool.space (default)' : w.savedServer ? 'Electrs · Custom server' : 'Electrs · Not configured'} onPress={() => router.push('/server')} />
     <View style={styles.divider} /><Row icon="coins" title="Advanced settings" detail="Address gap limit, wallet details and transaction tools" onPress={() => router.push('/advanced')} />

@@ -366,7 +366,8 @@ not a partial spendable balance, if 1,000 addresses per branch, 1,000 coins or
 2,000 unique history entries would be exceeded. History displays 30 entries at a time with server-reported confirmations. Full previous transaction data
 from `blockchain.transaction.get` is checked against txid, vout, value and owned
 script before a coin enters the wallet snapshot. Immature coinbase is displayed
-but never selected; unconfirmed spend requires explicit opt-in.
+but never selected. Unconfirmed outputs are spendable by default in automatic
+and manual selection; Coin control can disable their use.
 
 Receive and change cursors are monotonic and scoped to the xpub in SecureStore.
 Save before displaying a fresh receive address or exposing a prepared change
@@ -542,3 +543,13 @@ Backgrounding invalidates active operations, closes connections, clears PIN and
 pairing input, and covers the UI. Returning never resumes signing or broadcasting
 automatically. Signed-payment recovery, explicit send confirmation, account
 pinning and the existing wire contract remain unchanged.
+
+
+### Wallet refresh UI
+
+Home displays “Updating…” in the balance while a wallet sync is running, with
+a rotating circular-arrow refresh button beside the balance label. Fee lookup
+and other wallet operations do not animate this control. The Home payment card
+is removed; Activity retains the pending/signed-payment and recovery entry point.
+Settings keeps branding and version information without the remote-access and
+Bitcoin-key taglines. The wire protocol and explicit broadcast confirmation are unchanged.
